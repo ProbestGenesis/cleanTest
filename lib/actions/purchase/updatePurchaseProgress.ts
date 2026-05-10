@@ -1,9 +1,9 @@
 "use server"
 
-import { isAdminId } from '@/lib/isAdmin'
-import { prisma } from '@/lib/prisma'
-import { revalidatePath } from 'next/cache'
-import { PaymentMethod } from '@/generated/prisma/client'
+import { isAdminId } from "@/lib/isAdmin"
+import { prisma } from "@/lib/prisma"
+import { revalidatePath } from "next/cache"
+import { PaymentMethod } from "@/generated/prisma/client"
 
 type UpdateProgressInput = {
   purchaseId: string
@@ -19,7 +19,10 @@ export const updatePurchaseProgress = async (input: UpdateProgressInput) => {
   try {
     const userId = await isAdminId()
     if (!userId) {
-      return { ok: false, message: "Vous n'avez pas les autorisations nécessaires." }
+      return {
+        ok: false,
+        message: "Vous n'avez pas les autorisations nécessaires.",
+      }
     }
 
     const user = await prisma.user.findUnique({
@@ -37,17 +40,9 @@ export const updatePurchaseProgress = async (input: UpdateProgressInput) => {
       // 1. Fetch current purchase
       const purchase = await tx.purchase.findUnique({
         where: { id: input.purchaseId },
-        select: { 
-          id: true, 
-          designation: true, 
-          category: true, 
-          providerId: true, 
-          invoiceNumber: true,
-          receivedQuantity: true,
-          quantity: true,
-          totalAmount: true,
-          amountPaid: true
-        }
+        include: {
+          purchaseItems: { select: { productName: true, quantity: true } },
+        },
       })
 
       if (!purchase) throw new Error("Achat introuvable")
@@ -58,12 +53,10 @@ export const updatePurchaseProgress = async (input: UpdateProgressInput) => {
       const updatedPurchase = await tx.purchase.update({
         where: { id: input.purchaseId },
         data: {
-          interests: input.interests !== undefined ? input.interests : undefined,
           dueDate: input.dueDate ? new Date(input.dueDate) : undefined,
-          receivedQuantity: input.receivedQuantity !== undefined ? input.receivedQuantity : undefined,
           amountPaid: newAmountPaid,
           isPaid: newAmountPaid >= purchase.totalAmount,
-          paymentDate: input.amountPaid ? new Date() : undefined
+          paymentDate: input.amountPaid ? new Date() : undefined,
         },
       })
 
@@ -73,41 +66,46 @@ export const updatePurchaseProgress = async (input: UpdateProgressInput) => {
           await tx.providerPayment.create({
             data: {
               amount: input.amountPaid,
-              paymentDate: new Date().toISOString().split('T')[0],
-              method: input.paymentMethod || 'CASH',
-              notes: input.notes || `Paiement pour l'achat ${purchase.invoiceNumber || input.purchaseId}`,
+              paymentDate: new Date().toISOString().split("T")[0],
+              method: input.paymentMethod || "CASH",
+              notes:
+                input.notes ||
+                `Paiement pour l'achat ${purchase.invoiceNumber || input.purchaseId}`,
               purchaseId: input.purchaseId,
               providerId: purchase.providerId,
               authorId: workerId,
               userId: userId,
-            }
+            },
           })
         }
       }
 
       // 4. Send notification
       const superAdmins = await tx.user.findMany({
-        where: { role: 'superadmin' },
+        where: { role: "superadmin" },
         select: { id: true },
       })
-      
+
       const receiptIds = superAdmins.map((u) => u.id)
-      
+
       if (receiptIds.length > 0) {
         let body = ""
-        if (input.receivedQuantity !== undefined && input.receivedQuantity !== purchase.receivedQuantity) {
-          body = `La quantité reçue pour l'achat "${purchase.designation || purchase.category}" a été mise à jour : ${input.receivedQuantity} / ${purchase.quantity}.`
+        const firstItem = purchase.purchaseItems[0]
+        const purchaseLabel =
+          firstItem?.productName ?? purchase.invoiceNumber ?? input.purchaseId
+        if (input.receivedQuantity !== undefined) {
+          body = `La quantité reçue pour l'achat "${purchaseLabel}" a été mise à jour : ${input.receivedQuantity} / ${firstItem?.quantity ?? 0}.`
         } else if (input.amountPaid) {
-          body = `Un paiement de ${input.amountPaid.toLocaleString()} XOF a été enregistré pour l'achat "${purchase.designation || purchase.category}".`
+          body = `Un paiement de ${input.amountPaid.toLocaleString()} XOF a été enregistré pour l'achat "${purchaseLabel}".`
         }
 
         if (body) {
           await tx.notification.create({
             data: {
-              title: 'Mise à jour d\'achat',
+              title: "Mise à jour d'achat",
               body,
-              type: 'PURCHASE',
-              link: '/interne/purchases',
+              type: "PURCHASE",
+              link: "/interne/purchases",
               emitter: { connect: { id: userId } },
               receiptIds,
               readByIds: receiptIds.includes(userId) ? [userId] : [],
@@ -119,7 +117,7 @@ export const updatePurchaseProgress = async (input: UpdateProgressInput) => {
       return updatedPurchase
     })
 
-    revalidatePath('/interne/purchases')
+    revalidatePath("/interne/purchases")
     return { ok: true, message: "Progression mise à jour avec succès." }
   } catch (error) {
     console.error("Error updating purchase progress:", error)

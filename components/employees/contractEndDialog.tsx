@@ -1,8 +1,8 @@
-'use client'
+"use client"
 
-import { Worker } from '@/generated/prisma/client'
-import { Button } from '@/components/ui/button'
-import { Calendar } from '@/components/ui/calendar'
+import { Worker } from "@/generated/prisma/client"
+import { Button } from "@/components/ui/button"
+import { Calendar } from "@/components/ui/calendar"
 import {
   Dialog,
   DialogContent,
@@ -10,37 +10,56 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { cn } from '@/lib/utils'
-import { updateWorkerContract } from '@/lib/actions/workers/addWorker'
-import { format } from 'date-fns'
-import { fr } from 'date-fns/locale'
-import { CalendarIcon, History, UserMinus } from 'lucide-react'
-import { useState, useTransition } from 'react'
-import { toast } from 'sonner'
+} from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { cn } from "@/lib/utils"
+import { updateWorkerContract } from "@/lib/actions/workers/addWorker"
+import { useQueryClient } from "@tanstack/react-query"
+import { format } from "date-fns"
+import { fr } from "date-fns/locale"
+import { CalendarIcon, History, UserMinus } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { useState, useTransition } from "react"
+import { toast } from "sonner"
 
 type Props = {
   data: Worker
 }
 
+type TerminateStatus = "INACTIF" | "TIMEOFF" | "FIRED"
+
 export default function ContractEndDialog({ data }: Props) {
+  const router = useRouter()
+  const queryClient = useQueryClient()
   const [isOpen, setIsOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [newEndDate, setNewEndDate] = useState<Date | undefined>(
     data.officialEnd ? new Date(data.officialEnd) : undefined
   )
-  const [newDuration, setNewDuration] = useState(data.contractDuration || '')
-  const [terminateStatus, setTerminateStatus] = useState<'INACTIF' | 'TIMEOFF' | 'FIRED'>('INACTIF')
+  const [newDuration, setNewDuration] = useState(data.contractDuration || "")
+  const [terminateStatus, setTerminateStatus] =
+    useState<TerminateStatus>("INACTIF")
+
+  const refreshWorkers = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["workers"] }),
+      queryClient.invalidateQueries({ queryKey: ["workerStats"] }),
+    ])
+    router.refresh()
+  }
 
   const handleTerminate = () => {
     startTransition(async () => {
@@ -50,6 +69,7 @@ export default function ContractEndDialog({ data }: Props) {
       })
       if (ok) {
         toast.success(message)
+        await refreshWorkers()
         setIsOpen(false)
       } else {
         toast.error(message)
@@ -63,10 +83,11 @@ export default function ContractEndDialog({ data }: Props) {
         id: data.id,
         officialEnd: newEndDate,
         contractDuration: newDuration,
-        status: 'ACTIF',
+        status: "ACTIF",
       })
       if (ok) {
         toast.success(message)
+        await refreshWorkers()
         setIsOpen(false)
       } else {
         toast.error(message)
@@ -77,7 +98,7 @@ export default function ContractEndDialog({ data }: Props) {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <span className="flex justify-between w-full hover:text-accent-foreground hover:bg-accent transition-all py-2 px-0.5 rounded-lg text-accent cursor-pointer">
+        <span className="flex w-full cursor-pointer justify-between rounded-lg px-0.5 py-2 text-accent transition-all hover:bg-accent hover:text-accent-foreground">
           <p>Gérer le contrat</p>
           <History size={20} />
         </span>
@@ -99,13 +120,22 @@ export default function ContractEndDialog({ data }: Props) {
           <TabsContent value="terminate" className="space-y-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="status">Raison/Statut de fin</Label>
-              <Select value={terminateStatus} onValueChange={(val: any) => setTerminateStatus(val)}>
+              <Select
+                value={terminateStatus}
+                onValueChange={(val) =>
+                  setTerminateStatus(val as TerminateStatus)
+                }
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Choisir un statut" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="INACTIF">Fin de contrat standard </SelectItem>
-                  <SelectItem value="TIMEOFF">Mise en disponibilité / Pause </SelectItem>
+                  <SelectItem value="INACTIF">
+                    Fin de contrat standard{" "}
+                  </SelectItem>
+                  <SelectItem value="TIMEOFF">
+                    Mise en disponibilité / Pause{" "}
+                  </SelectItem>
                   <SelectItem value="FIRED">Licenciement </SelectItem>
                 </SelectContent>
               </Select>
@@ -114,7 +144,7 @@ export default function ContractEndDialog({ data }: Props) {
               <p className="text-sm text-destructive font-medium text-center">
                 Cette action changera le statut de l'employé vers {terminateStatus}.
               </p>
-            </div>*/}{' '}
+            </div>*/}{" "}
             <Button
               variant="destructive"
               className="w-full rounded-full"
@@ -149,15 +179,15 @@ export default function ContractEndDialog({ data }: Props) {
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
-                      variant={'outline'}
+                      variant={"outline"}
                       className={cn(
-                        'w-full justify-start text-left font-normal rounded-full',
-                        !newEndDate && 'text-muted-foreground'
+                        "w-full justify-start rounded-full text-left font-normal",
+                        !newEndDate && "text-muted-foreground"
                       )}
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
                       {newEndDate ? (
-                        format(newEndDate, 'PPP', { locale: fr })
+                        format(newEndDate, "PPP", { locale: fr })
                       ) : (
                         <span>Choisir une date</span>
                       )}
@@ -173,7 +203,11 @@ export default function ContractEndDialog({ data }: Props) {
                 </Popover>
               </div>
             </div>
-            <Button className="w-full" onClick={handleExtend} disabled={isPending}>
+            <Button
+              className="w-full"
+              onClick={handleExtend}
+              disabled={isPending}
+            >
               Enregistrer la prolongation
             </Button>
           </TabsContent>

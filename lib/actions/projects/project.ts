@@ -66,7 +66,7 @@ export async function getProjectFinancials() {
     }
     const projects = await prisma.project.findMany({
       include: {
-        purchases: { select: { estimatePrice: true } },
+        purchases: { select: { totalAmount: true } },
         expenseRequests: {
           where: { status: "APPROVED" },
           select: { estimatedAmount: true },
@@ -78,7 +78,7 @@ export async function getProjectFinancials() {
 
     const financialData = projects.map((p) => {
       const totalPurchases = p.purchases.reduce(
-        (acc, curr) => acc + (curr.estimatePrice || 0),
+        (acc, curr) => acc + (curr.totalAmount || 0),
         0
       )
       const totalExpenseRequests = p.expenseRequests.reduce(

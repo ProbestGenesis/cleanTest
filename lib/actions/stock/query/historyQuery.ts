@@ -1,12 +1,17 @@
-import { Prisma, StockEditHistorique, StockEditStatus, StockEditType } from '@/generated/prisma/client'
-import { prisma } from '@/lib/prisma'
-import { DEFAULT_STOCK_LIMIT } from './query'
+import {
+  Prisma,
+  StockEditHistorique,
+  StockEditStatus,
+  StockEditType,
+} from "@/generated/prisma/client"
+import { prisma } from "@/lib/prisma"
+import { DEFAULT_STOCK_LIMIT } from "./query"
 
 export type StockHistoryQueryParams = {
   page: number
   limit: number
-  validation?: 'all' | 'validated' | 'not_validated' | null
-  type?: StockEditType | 'all' | null
+  validation?: "all" | "validated" | "not_validated" | null
+  type?: StockEditType | "all" | null
   onlySales?: boolean
 }
 
@@ -22,35 +27,43 @@ export type StockHistoryResponse = {
   }
 }
 
-export async function getStockHistoryQueryResponse(params: StockHistoryQueryParams): Promise<StockHistoryResponse> {
+export async function getStockHistoryQueryResponse(
+  params: StockHistoryQueryParams
+): Promise<StockHistoryResponse> {
   const page = Number.isFinite(params.page) && params.page > 0 ? params.page : 1
-  const limit = Number.isFinite(params.limit) && params.limit > 0 ? params.limit : DEFAULT_STOCK_LIMIT
-  const validation = params.validation ?? 'all'
+  const limit =
+    Number.isFinite(params.limit) && params.limit > 0
+      ? params.limit
+      : DEFAULT_STOCK_LIMIT
+  const validation = params.validation ?? "all"
   const onlySales = params.onlySales ?? false
-  const operationType = params.type ?? 'all'
+  const operationType = params.type ?? "all"
 
   const statusFilter: Prisma.StockEditHistoriqueWhereInput =
-    validation === 'validated'
-      ? { status: 'ISVALIDED' as StockEditStatus }
-      : validation === 'not_validated'
-      ? {
-          status: {
-            in: ['PENDING_VALIDATION', 'AWAITING_CONFIRMATION', 'ISREJECTED'] as StockEditStatus[],
-          },
-        }
-      : {}
+    validation === "validated"
+      ? { status: "ISVALIDED" as StockEditStatus }
+      : validation === "not_validated"
+        ? {
+            status: {
+              in: [
+                "PENDING_VALIDATION",
+                "AWAITING_CONFIRMATION",
+                "ISREJECTED",
+              ] as StockEditStatus[],
+            },
+          }
+        : {}
 
-  const typeFilter: Prisma.StockEditHistoriqueWhereInput = 
-    operationType && operationType !== 'all'
+  const typeFilter: Prisma.StockEditHistoriqueWhereInput =
+    operationType && operationType !== "all"
       ? { type: operationType as StockEditType }
       : onlySales
-      ? { type: 'SELL' }
-      : {}
+        ? { type: "SELL" }
+        : {}
 
   const whereClause: Prisma.StockEditHistoriqueWhereInput = {
     AND: [statusFilter, typeFilter],
   }
-
 
   const skip = (page - 1) * limit
 
@@ -94,26 +107,27 @@ export async function getStockHistoryQueryResponse(params: StockHistoryQueryPara
         },
         purchase: {
           include: {
-            providerRel: {
+            provider: {
               select: {
                 name: true,
                 id: true,
               },
             },
+            purchaseItems: true,
           },
         },
       },
       skip,
       take: limit,
       orderBy: {
-        updatedAt: 'desc',
+        updatedAt: "desc",
       },
     }),
   ])
 
   return {
     ok: true,
-    message: items.length ? 'Historique récupéré' : 'Aucun historique trouvé',
+    message: items.length ? "Historique récupéré" : "Aucun historique trouvé",
     data: items,
     meta: {
       page,

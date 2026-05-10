@@ -1,9 +1,9 @@
-'use client'
+"use client"
 
-import React, { useTransition, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
+import React, { useTransition, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
+import { useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -11,7 +11,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from "@/components/ui/dialog"
 import {
   Field,
   FieldContent,
@@ -19,29 +19,29 @@ import {
   FieldError,
   FieldGroup,
   FieldLabel,
-  FieldLegend,
-  FieldSet,
-} from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
-import { AlertTriangle, UserCheck } from 'lucide-react'
-import clsx from 'clsx'
-import { Spinner } from '@/components/ui/spinner'
-import { authClient } from '@/lib/auth-client'
-import { Worker } from '@/generated/prisma/client'
-import { z } from 'zod'
-import { useForm, Controller } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
+} from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
+import { AlertTriangle, UserCheck } from "lucide-react"
+import clsx from "clsx"
+import { Spinner } from "@/components/ui/spinner"
+import { authClient } from "@/lib/auth-client"
+import { Worker } from "@/generated/prisma/client"
+import { z } from "zod"
+import { useForm, Controller } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
 
 type Props = {
   data: Worker & { workAccount: { id: string; banned: boolean | null } | null }
 }
 
 export const banSchema = z.object({
-  banReason: z.string().nonempty('Veuillez donner la raison de la mise à pieds'),
+  banReason: z
+    .string()
+    .nonempty("Veuillez donner la raison de la mise à pieds"),
   banDuration: z
     .number("Vueillez saisir la duree de la mise a pieds")
-    .nonnegative('Veuillez saisir un nombre supérieur à 0')
-    .min(1, 'La durée minimale est de 1 jour'),
+    .nonnegative("Veuillez saisir un nombre supérieur à 0")
+    .min(1, "La durée minimale est de 1 jour"),
 })
 
 type BanFormValues = z.infer<typeof banSchema>
@@ -49,16 +49,21 @@ type BanFormValues = z.infer<typeof banSchema>
 function BanWorkerDialog({ data }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
-  const [isSuccess, setIsSuccess] = useState<{ message: string; ok: undefined | boolean }>({
-    message: '',
+  const [isSuccess, setIsSuccess] = useState<{
+    message: string
+    ok: undefined | boolean
+  }>({
+    message: "",
     ok: undefined,
   })
   const [openDialog, setOpenDialog] = useState(false)
   const queryClient = useQueryClient()
 
-  const invalidateWorkers = () => {
-    queryClient.invalidateQueries({ queryKey: ['workers'] })
-    queryClient.invalidateQueries({ queryKey: ['workerStats'] })
+  const invalidateWorkers = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["workers"] }),
+      queryClient.invalidateQueries({ queryKey: ["workerStats"] }),
+    ])
   }
 
   const {
@@ -69,13 +74,13 @@ function BanWorkerDialog({ data }: Props) {
   } = useForm<BanFormValues>({
     resolver: zodResolver(banSchema),
     defaultValues: {
-      banReason: '',
+      banReason: "",
       banDuration: undefined,
     },
   })
 
   const clearMessage = () => {
-    setIsSuccess({ ok: undefined, message: '' })
+    setIsSuccess({ ok: undefined, message: "" })
   }
 
   const closeDialog = () => {
@@ -94,7 +99,10 @@ function BanWorkerDialog({ data }: Props) {
     })
 
     if (error) {
-      setIsSuccess({ message: "Une erreur s'est produite, veuillez réessayer.", ok: false })
+      setIsSuccess({
+        message: "Une erreur s'est produite, veuillez réessayer.",
+        ok: false,
+      })
       return
     }
 
@@ -103,11 +111,12 @@ function BanWorkerDialog({ data }: Props) {
       ok: true,
     })
 
+    await invalidateWorkers()
+    router.refresh()
+
     setTimeout(() => {
       clearMessage()
       closeDialog()
-      invalidateWorkers()
-      router.refresh()
     }, 2000)
   }
 
@@ -119,7 +128,10 @@ function BanWorkerDialog({ data }: Props) {
     })
 
     if (error) {
-      setIsSuccess({ message: "Une erreur s'est produite, veuillez réessayer.", ok: false })
+      setIsSuccess({
+        message: "Une erreur s'est produite, veuillez réessayer.",
+        ok: false,
+      })
       return
     }
 
@@ -128,19 +140,25 @@ function BanWorkerDialog({ data }: Props) {
       ok: true,
     })
 
+    await invalidateWorkers()
+    router.refresh()
+
     setTimeout(() => {
       clearMessage()
       closeDialog()
-      invalidateWorkers()
-      router.refresh()
     }, 2000)
   }
 
   return (
     <Dialog onOpenChange={(open) => !open && closeDialog()} open={openDialog}>
-      <div className="flex flex-col space-y-2 cursor-pointer" onClick={() => setOpenDialog(true)}>
-        <span className="flex justify-between w-full hover:bg-accent hover:text-accent-foreground transition-all py-2 px-0.5 rounded-lg">
-          {data.workAccount?.banned ? 'Annuler la mise à pieds' : 'Mise à pieds'}
+      <div
+        className="flex cursor-pointer flex-col space-y-2"
+        onClick={() => setOpenDialog(true)}
+      >
+        <span className="flex w-full justify-between rounded-lg px-0.5 py-2 transition-all hover:bg-accent hover:text-accent-foreground">
+          {data.workAccount?.banned
+            ? "Annuler la mise à pieds"
+            : "Mise à pieds"}
           {data.workAccount?.banned ? (
             <UserCheck size={16} color="green" />
           ) : (
@@ -152,24 +170,30 @@ function BanWorkerDialog({ data }: Props) {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            {data.workAccount?.banned ? 'Annuler la mise à pieds' : 'Mise à pieds'}
+            {data.workAccount?.banned
+              ? "Annuler la mise à pieds"
+              : "Mise à pieds"}
           </DialogTitle>
           <DialogDescription>
             {data.workAccount?.banned
               ? `Confirmez-vous l'annulation de la mise à pieds pour ${data.name} ?`
-              : 'Un utilisateur ayant reçu une mise à pieds ne pourra plus se connecter à la plateforme pendant la durée déterminée.'}
+              : "Un utilisateur ayant reçu une mise à pieds ne pourra plus se connecter à la plateforme pendant la durée déterminée."}
           </DialogDescription>
         </DialogHeader>
 
         {!data.workAccount?.banned ? (
           <form
-            onSubmit={handleSubmit((values) => startTransition(() => banWorker(values)))}
+            onSubmit={handleSubmit((values) =>
+              startTransition(() => banWorker(values))
+            )}
             className="space-y-4"
           >
             <FieldGroup>
               {/* Raison */}
               <Field>
-                <FieldLabel htmlFor="banReason">Raison de la mise à pieds</FieldLabel>
+                <FieldLabel htmlFor="banReason">
+                  Raison de la mise à pieds
+                </FieldLabel>
                 <FieldContent>
                   <Controller
                     control={control}
@@ -184,7 +208,9 @@ function BanWorkerDialog({ data }: Props) {
                     )}
                   />
                 </FieldContent>
-                {errors.banReason && <FieldError>{errors.banReason.message}</FieldError>}
+                {errors.banReason && (
+                  <FieldError>{errors.banReason.message}</FieldError>
+                )}
               </Field>
 
               {/* Durée */}
@@ -201,25 +227,31 @@ function BanWorkerDialog({ data }: Props) {
                         placeholder="Ex : 7"
                         min={1}
                         aria-invalid={!!errors.banDuration}
-                        value={field.value ?? ''}
+                        value={field.value ?? ""}
                         onChange={(e) =>
-                          field.onChange(e.target.value === '' ? undefined : Number(e.target.value))
+                          field.onChange(
+                            e.target.value === ""
+                              ? undefined
+                              : Number(e.target.value)
+                          )
                         }
                       />
                     )}
                   />
                   <FieldDescription>Saisir la durée en jour</FieldDescription>
                 </FieldContent>
-                {errors.banDuration && <FieldError>{errors.banDuration.message}</FieldError>}
+                {errors.banDuration && (
+                  <FieldError>{errors.banDuration.message}</FieldError>
+                )}
               </Field>
             </FieldGroup>
 
             {/* Message de retour */}
             {isSuccess.message && (
               <p
-                className={clsx('text-sm font-medium', {
-                  'text-green-500': isSuccess.ok,
-                  'text-destructive': isSuccess.ok === false,
+                className={clsx("text-sm font-medium", {
+                  "text-green-500": isSuccess.ok,
+                  "text-destructive": isSuccess.ok === false,
                 })}
               >
                 {isSuccess.message}
@@ -227,7 +259,7 @@ function BanWorkerDialog({ data }: Props) {
             )}
 
             <DialogFooter>
-              <div className="flex justify-end items-center space-x-4">
+              <div className="flex items-center justify-end space-x-4">
                 <Button
                   type="button"
                   className="rounded-full"
@@ -237,8 +269,12 @@ function BanWorkerDialog({ data }: Props) {
                   Annuler
                 </Button>
                 {!isSuccess.ok && (
-                  <Button type="submit" className="rounded-full" disabled={isPending}>
-                    {isPending ? <Spinner /> : 'Confirmer la mise à pieds'}
+                  <Button
+                    type="submit"
+                    className="rounded-full"
+                    disabled={isPending}
+                  >
+                    {isPending ? <Spinner /> : "Confirmer la mise à pieds"}
                   </Button>
                 )}
               </div>
@@ -248,16 +284,16 @@ function BanWorkerDialog({ data }: Props) {
           <div className="space-y-4">
             {isSuccess.message && (
               <p
-                className={clsx('text-sm font-medium', {
-                  'text-green-500': isSuccess.ok,
-                  'text-destructive': isSuccess.ok === false,
+                className={clsx("text-sm font-medium", {
+                  "text-green-500": isSuccess.ok,
+                  "text-destructive": isSuccess.ok === false,
                 })}
               >
                 {isSuccess.message}
               </p>
             )}
             <DialogFooter>
-              <div className="flex justify-end items-center space-x-4">
+              <div className="flex items-center justify-end space-x-4">
                 <Button
                   type="button"
                   className="rounded-full"

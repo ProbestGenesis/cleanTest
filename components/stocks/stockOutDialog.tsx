@@ -46,7 +46,14 @@ import { useQueryClient } from "@tanstack/react-query"
 import clsx from "clsx"
 import { Check, ChevronsUpDown, PlusCircle, Trash2 } from "lucide-react"
 import { useEffect, useMemo, useState, useTransition } from "react"
-import { Controller, useFieldArray, useForm } from "react-hook-form"
+import {
+  Controller,
+  type Resolver,
+  type SubmitHandler,
+  useFieldArray,
+  useForm,
+  useWatch,
+} from "react-hook-form"
 import z from "zod"
 
 type Props = {
@@ -57,6 +64,23 @@ type Props = {
 }
 
 type OperationType = "STOCK_OUT" | "SELL"
+
+type StockOutFormValues = z.infer<typeof bulkStockOutRequest>
+type SellFormValues = z.infer<typeof sellProducts>
+
+type FormItem = {
+  productId: string
+  quantity: number
+  reason: string
+  destination: string
+  purchasePrice: number
+}
+
+type FormValues = {
+  name: string
+  type: SellFormValues["type"]
+  items: FormItem[]
+}
 
 function StockOutDialog({
   isOpen,
@@ -78,64 +102,44 @@ function StockOutDialog({
 
   // Hooks for data
   const stockData = useStock({ limit: 100 })
-  const allProducts = (stockData.data as Product[]) || []
+  const allProducts = useMemo(
+    () => (stockData.data as Product[] | undefined) ?? [],
+    [stockData.data]
+  )
   const { data: clientsData } = useClients(clientSearch)
   const allClients = clientsData?.data || []
 
-  const initialStockOutItems = useMemo(() => {
-    if (providedProducts && providedProducts.length > 0) {
-      return providedProducts.map((p) => ({
-        productId: p.id,
-        quantity: 1,
-        reason: "",
-        destination: "",
-      }))
-    }
-    if (product) {
-      return [
-        {
-          productId: product.id,
-          quantity: 1,
-          reason: "",
-          destination: "",
-        },
-      ]
-    }
-    return []
+  const initialItems = useMemo<FormItem[]>(() => {
+    const selectedProducts =
+      providedProducts && providedProducts.length > 0
+        ? providedProducts
+        : product
+          ? [product]
+          : []
+
+    return selectedProducts.map((p) => ({
+      productId: p.id,
+      quantity: 1,
+      reason: "",
+      destination: "",
+      purchasePrice: p.sellingPrice || 0,
+    }))
   }, [product, providedProducts])
 
-  const initialSellItems = useMemo(() => {
-    if (providedProducts && providedProducts.length > 0) {
-      return providedProducts.map((p) => ({
-        productId: p.id,
-        quantity: 1,
-        purchasePrice: p.sellingPrice || 0,
-      }))
-    }
-    if (product) {
-      return [
-        {
-          productId: product.id,
-          quantity: 1,
-          purchasePrice: product.sellingPrice || 0,
-        },
-      ]
-    }
-    return []
-  }, [product, providedProducts])
+  const defaultFormValues = useMemo<FormValues>(
+    () => ({
+      name: "",
+      type: "DIRECT",
+      items: initialItems,
+    }),
+    [initialItems]
+  )
 
-  const form = useForm({
-    defaultValues:
-      operationType === "STOCK_OUT"
-        ? { items: initialStockOutItems }
-        : {
-            name: "",
-            type: "DIRECT",
-            items: initialSellItems,
-          },
+  const form = useForm<FormValues>({
+    defaultValues: defaultFormValues,
     resolver: zodResolver(
       operationType === "STOCK_OUT" ? bulkStockOutRequest : sellProducts
-    ),
+    ) as unknown as Resolver<FormValues>,
     mode: "onChange",
     reValidateMode: "onChange",
   })
@@ -145,9 +149,14 @@ function StockOutDialog({
     name: "items",
   })
 
-  const productIds = fields
-    .map((_, idx) => form.watch(`items.${idx}`)?.productId)
-    .filter(Boolean) as string[]
+  const watchedItems = useWatch({ control: form.control, name: "items" })
+  const productIds = useMemo(
+    () =>
+      (watchedItems ?? [])
+        .map((item) => item.productId)
+        .filter((productId): productId is string => Boolean(productId)),
+    [watchedItems]
+  )
   const { data: availabilityData } = useAvailability(productIds)
 
   const availabilityById = useMemo(() => {
@@ -163,32 +172,23 @@ function StockOutDialog({
 
   useEffect(() => {
     if (isOpen) {
-      if (operationType === "STOCK_OUT") {
-        form.reset({ items: initialStockOutItems })
-      } else {
-        form.reset({
-          name: "",
-          type: "DIRECT",
-          items: initialSellItems,
-        })
-      }
+      form.reset(defaultFormValues)
       setMessage({ ok: false, text: "" })
       setSelectedClientId("")
       setSelectedClientName("")
       setClientSearch("")
     }
-  }, [isOpen, operationType, initialStockOutItems, initialSellItems, form])
+  }, [isOpen, operationType, defaultFormValues, form])
 
   const handleClose = () => {
     setMessage({ ok: false, text: "" })
     onClose()
   }
 
-  const onSubmit = (value: unknown) => {
+  const onSubmit: SubmitHandler<FormValues> = (value) => {
     startTransition(async () => {
       // Check availability
-      const items = (value as any).items || []
-      for (const item of items) {
+      for (const item of value.items) {
         const availability = availabilityById[item.productId]
         if (availability && item.quantity > availability.available) {
           setMessage({
@@ -201,21 +201,30 @@ function StockOutDialog({
 
       let result: { ok: boolean; message: string }
       if (operationType === "SELL") {
-        const sellValue = value as z.infer<typeof sellProducts>
+        const sellValue: SellFormValues = {
+          name: selectedClientName || value.name,
+          type: value.type,
+          items: value.items.map((it) => ({
+            productId: it.productId,
+            quantity: it.quantity,
+            purchasePrice: it.purchasePrice,
+          })),
+        }
+
         result = await sellProduct({
-          value: {
-            name: selectedClientName || sellValue.name,
-            type: sellValue.type,
-            items: sellValue.items.map((it) => ({
-              productId: it.productId,
-              quantity: it.quantity,
-              purchasePrice: it.purchasePrice,
-            })),
-          },
+          value: sellValue,
           clientId: selectedClientId || undefined,
         })
       } else {
-        const stockOutValue = value as z.infer<typeof bulkStockOutRequest>
+        const stockOutValue: StockOutFormValues = {
+          items: value.items.map((it) => ({
+            productId: it.productId,
+            quantity: it.quantity,
+            reason: it.reason,
+            destination: it.destination,
+          })),
+        }
+
         result = await createBulkStockOutRequest(stockOutValue)
       }
 
@@ -238,12 +247,11 @@ function StockOutDialog({
     [allProducts]
   )
 
-  const sharedDestination = form.watch("items.0.destination") ?? ""
-  const sharedReason = form.watch("items.0.reason") ?? ""
-  const sharedDestinationError = (form.formState.errors.items as any)?.[0]
-    ?.destination?.message
-  const sharedReasonError = (form.formState.errors.items as any)?.[0]?.reason
-    ?.message
+  const itemErrors = form.formState.errors.items
+  const sharedDestination = watchedItems?.[0]?.destination ?? ""
+  const sharedReason = watchedItems?.[0]?.reason ?? ""
+  const sharedDestinationError = itemErrors?.[0]?.destination?.message
+  const sharedReasonError = itemErrors?.[0]?.reason?.message
 
   const updateSharedDestination = (value: string) => {
     fields.forEach((_, index) => {
@@ -459,7 +467,7 @@ function StockOutDialog({
                 Produits
               </h3>
               {fields.map((field, index) => {
-                const itemValues = form.watch(`items.${index}`)
+                const itemValues = watchedItems?.[index]
                 const currentProduct = productMap.get(itemValues?.productId)
                 const availability =
                   availabilityById[itemValues?.productId ?? ""]
@@ -504,14 +512,9 @@ function StockOutDialog({
                                     ))}
                                   </SelectContent>
                                 </Select>
-                                {(form.formState.errors.items as any)?.[index]
-                                  ?.productId && (
+                                {itemErrors?.[index]?.productId && (
                                   <FieldError>
-                                    {
-                                      (form.formState.errors.items as any)[
-                                        index
-                                      ]?.productId?.message
-                                    }
+                                    {itemErrors[index]?.productId?.message}
                                   </FieldError>
                                 )}
                               </Field>
@@ -553,13 +556,9 @@ function StockOutDialog({
                                     </strong>
                                   </p>
                                 </div>
-                                {(form.formState.errors.items as any)?.[index]
-                                  ?.quantity && (
+                                {itemErrors?.[index]?.quantity && (
                                   <FieldError>
-                                    {
-                                      (form.formState.errors.items as any)[index]
-                                        ?.quantity?.message
-                                    }
+                                    {itemErrors[index]?.quantity?.message}
                                   </FieldError>
                                 )}
                               </Field>
@@ -588,12 +587,11 @@ function StockOutDialog({
                                       )
                                     }
                                   />
-                                  {form.formState.errors.items?.[index]
-                                    ?.purchasePrice && (
+                                  {itemErrors?.[index]?.purchasePrice && (
                                     <FieldError>
                                       {
-                                        form.formState.errors.items[index]
-                                          ?.purchasePrice?.message
+                                        itemErrors[index]?.purchasePrice
+                                          ?.message
                                       }
                                     </FieldError>
                                   )}

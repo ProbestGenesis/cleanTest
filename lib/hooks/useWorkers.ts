@@ -1,7 +1,7 @@
-'use client'
+"use client"
 
-import { useQuery } from '@tanstack/react-query'
-import { CACHE_CONFIG } from '@/lib/constants/caching'
+import { useQuery } from "@tanstack/react-query"
+import { CACHE_CONFIG } from "@/lib/constants/caching"
 
 export interface WorkerData {
   id: string
@@ -9,8 +9,8 @@ export interface WorkerData {
   email: string
   phone: string
   role: string
-  type: 'CDI' | 'CDD' | 'TRAINEE'
-  status: 'ACTIF' | 'INACTIF' | 'FIRED' | 'TIMEOFF' | 'VACATION' | 'SICK_LEAVE'
+  type: "CDI" | "CDD" | "TRAINEE"
+  status: "ACTIF" | "INACTIF" | "FIRED" | "TIMEOFF" | "VACATION" | "SICK_LEAVE"
   salary: number
   salaryNet?: number
   officalStart: Date
@@ -21,7 +21,7 @@ export interface WorkerData {
   workAccount?: {
     id: string
     role: string
-    banned?: boolean,
+    banned?: boolean
     pageAccess: string[]
   }
 }
@@ -40,6 +40,7 @@ export interface WorkerStats {
   onLeave: number
   inactive: number
   totalSalary: number
+  totalTraineeSalary: number
   totalContributions: number
   onLeaveEmployees: {
     id: string
@@ -59,32 +60,41 @@ export interface WorkerStats {
   }[]
 }
 
-export const useWorkers = ({ status = 'all', search = '', type, enabled = true }: UseWorkersParams = {}) => {
+export const useWorkers = ({
+  status = "all",
+  search = "",
+  type,
+  enabled = true,
+}: UseWorkersParams = {}) => {
   return useQuery({
-    queryKey: ['workers', status, search, type],
+    queryKey: ["workers", status, search, type],
     queryFn: async () => {
       const params = new URLSearchParams()
-      if (status) params.append('status', status)
-      if (search) params.append('search', search)
-      if (type) params.append('type', type)
+      if (status) params.append("status", status)
+      if (search) params.append("search", search)
+      if (type) params.append("type", type)
 
-      const response = await fetch(`/api/workers?${params.toString()}`)
-      if (!response.ok) throw new Error('Failed to fetch workers')
+      const response = await fetch(`/api/workers?${params.toString()}`, {
+        cache: "no-store",
+      })
+      if (!response.ok) throw new Error("Failed to fetch workers")
       const data = await response.json()
       return data.data as WorkerData[]
     },
     enabled,
     staleTime: CACHE_CONFIG.WORKERS.staleTime,
     gcTime: CACHE_CONFIG.WORKERS.gcTime,
+    refetchOnWindowFocus: false,
+    placeholderData: (previousData) => previousData,
   })
 }
 
 export const useWorkerTeams = (enabled = true) => {
   return useQuery({
-    queryKey: ['workerTeams'],
+    queryKey: ["workerTeams"],
     queryFn: async () => {
-      const response = await fetch('/api/teams')
-      if (!response.ok) throw new Error('Failed to fetch teams')
+      const response = await fetch("/api/teams")
+      if (!response.ok) throw new Error("Failed to fetch teams")
       const data = await response.json()
       return data.data
     },
@@ -96,24 +106,26 @@ export const useWorkerTeams = (enabled = true) => {
 
 export const useWorkerStats = () => {
   return useQuery({
-    queryKey: ['workerStats'],
+    queryKey: ["workerStats"],
     queryFn: async () => {
-      const response = await fetch('/api/workers/stats')
-      if (!response.ok) throw new Error('Failed to fetch stats')
+      const response = await fetch("/api/workers/stats")
+      if (!response.ok) throw new Error("Failed to fetch stats")
       const data = await response.json()
       return data.data as WorkerStats
     },
     staleTime: CACHE_CONFIG.STATS.staleTime,
     gcTime: CACHE_CONFIG.STATS.gcTime,
+    refetchOnWindowFocus: false,
+    placeholderData: (previousData) => previousData,
   })
 }
 
 export const useParticularTasks = () => {
   return useQuery({
-    queryKey: ['particularTasks'],
+    queryKey: ["particularTasks"],
     queryFn: async () => {
-      const response = await fetch('/api/particular-tasks')
-      if (!response.ok) throw new Error('Failed to fetch particular tasks')
+      const response = await fetch("/api/particular-tasks")
+      if (!response.ok) throw new Error("Failed to fetch particular tasks")
       const data = await response.json()
       return data.data
     },
@@ -124,9 +136,9 @@ export const useParticularTasks = () => {
 
 export const useWorkerRoles = () => {
   return useQuery({
-    queryKey: ['workerRoles'],
+    queryKey: ["workerRoles"],
     queryFn: async () => {
-      const { getWorkerRoles } = await import('@/lib/actions/workers/addWorker')
+      const { getWorkerRoles } = await import("@/lib/actions/workers/addWorker")
       return getWorkerRoles()
     },
     staleTime: CACHE_CONFIG.WORKERS.staleTime,

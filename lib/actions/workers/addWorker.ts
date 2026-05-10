@@ -1,34 +1,34 @@
-'use server'
-import { auth } from '@/lib/auth'
-import { isAdmin, isAdminId } from '@/lib/isAdmin'
-import { isAuthed } from '@/lib/isAuthed'
-import { prisma } from '@/lib/prisma'
-import { uploadImage, deleteImage } from '@/lib/uploadImages'
-import { createWorker } from '@/lib/zodschema'
-import { nanoid, customAlphabet } from 'nanoid'
-import { revalidatePath } from 'next/cache'
-import z from 'zod'
+"use server"
+import { auth } from "@/lib/auth"
+import { isAdmin, isAdminId } from "@/lib/isAdmin"
+import { isAuthed } from "@/lib/isAuthed"
+import { prisma } from "@/lib/prisma"
+import { uploadImage, deleteImage } from "@/lib/uploadImages"
+import { createWorker } from "@/lib/zodschema"
+import { nanoid, customAlphabet } from "nanoid"
+import { revalidatePath } from "next/cache"
+import z from "zod"
 enum WorkerType {
-  CDI = 'CDI',
-  CDD = 'CDD',
-  TRAINEE = 'TRAINEE',
+  CDI = "CDI",
+  CDD = "CDD",
+  TRAINEE = "TRAINEE",
 }
 
-
 export const addWorker = async (value: z.infer<typeof createWorker>) => {
-  const matricule = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZ', 6)
+  const matricule = customAlphabet("ABCDEFGHIJKLMNOPQRSTUVWXYZ", 6)
 
   try {
     const adminId = await isAdminId()
     if (!adminId) {
       return {
         ok: false,
-        message: "Vous n'avez pas les authorisations nécessaire pour éffectuer cette action",
+        message:
+          "Vous n'avez pas les authorisations nécessaire pour éffectuer cette action",
         matricule: null,
       }
     }
 
-    let imageUrl = ''
+    let imageUrl = ""
     if (value.image) {
       const { message, url } = await uploadImage({
         filename: `${Date.now()}-${(value.image as File).name}`,
@@ -61,13 +61,13 @@ export const addWorker = async (value: z.infer<typeof createWorker>) => {
         salaryCurrency: value.salary.currency ?? null,
         salaryFrequency: value.salary.frequency ?? null,
         salaryBonuses: value.salary.bonuses ?? 0,
-        salaryDeductions: value.salary.deductions ,
+        salaryDeductions: value.salary.deductions,
         matricule: matricule(),
-        image: imageUrl ?? '',
+        image: imageUrl ?? "",
         addedBy: {
           connect: { id: adminId },
         },
-        status: 'ACTIF',
+        status: "ACTIF",
         contractDuration: value.contractDuration ?? null,
         socialContributions: value.salary.gross * 0.315,
       },
@@ -86,11 +86,11 @@ export const addWorker = async (value: z.infer<typeof createWorker>) => {
         email: worker.email,
         name: worker.name,
         password: worker.matricule,
-        role: 'user',
+        role: "user",
         data: {
           passwordIsAlreadySet: false,
           workerId: worker.id,
-          workRole: value.role
+          workRole: value.role,
         },
       },
     })
@@ -106,13 +106,17 @@ export const addWorker = async (value: z.infer<typeof createWorker>) => {
     }
 
     // revalidation / cache
-    revalidatePath('/interne')
-    revalidatePath('/interne/employees')
-    revalidatePath('/interne/products')
-    revalidatePath('/interne/sales')
-    revalidatePath('/interne/stock')
+    revalidatePath("/interne")
+    revalidatePath("/interne/employees")
+    revalidatePath("/interne/products")
+    revalidatePath("/interne/sales")
+    revalidatePath("/interne/stock")
 
-    return { ok: true, message: "L'ajout a été éffectué", matricule: worker.matricule }
+    return {
+      ok: true,
+      message: "L'ajout a été éffectué",
+      matricule: worker.matricule,
+    }
   } catch (error) {
     console.error(error)
     return {
@@ -122,7 +126,6 @@ export const addWorker = async (value: z.infer<typeof createWorker>) => {
     }
   }
 }
-
 
 const verfiyWorker = async (id: string) => {
   try {
@@ -141,7 +144,7 @@ const verfiyWorker = async (id: string) => {
 
     return true
   } catch (error) {
-    console.log('error in worker verification', error)
+    console.log("error in worker verification", error)
     return false
   }
 }
@@ -152,7 +155,8 @@ export const deleteWorker = async (id: string) => {
     if (!admin) {
       return {
         ok: false,
-        message: "Vous n'avez pas les authorisations nécessaire pour éffecuté cette opération",
+        message:
+          "Vous n'avez pas les authorisations nécessaire pour éffecuté cette opération",
       }
     }
 
@@ -167,7 +171,7 @@ export const deleteWorker = async (id: string) => {
 
     const worker = await prisma.worker.findUnique({
       where: { id },
-      select: { image: true }
+      select: { image: true },
     })
 
     if (worker?.image) {
@@ -179,6 +183,9 @@ export const deleteWorker = async (id: string) => {
         id: id,
       },
     })
+
+    revalidatePath("/interne")
+    revalidatePath("/interne/employees")
 
     return {
       message: "L'employée a été supprimé avec success",
@@ -205,7 +212,8 @@ export const updateWorker = async ({
     if (!admin) {
       return {
         ok: false,
-        message: "Vous n'avez pas les authorisations nécessaire pour éffecuté cette opération",
+        message:
+          "Vous n'avez pas les authorisations nécessaire pour éffecuté cette opération",
       }
     }
 
@@ -222,7 +230,7 @@ export const updateWorker = async ({
     if (value.image) {
       const oldWorker = await prisma.worker.findUnique({
         where: { id },
-        select: { image: true }
+        select: { image: true },
       })
 
       const { message, url } = await uploadImage({
@@ -266,15 +274,15 @@ export const updateWorker = async ({
         ...(imageUrl && { image: imageUrl }),
       },
     })
-    revalidatePath('/interne/employees')
-    revalidatePath('/interne')
-    revalidatePath('/interne/employees')
-    revalidatePath('/interne/products')
-    revalidatePath('/interne/sales')
-    revalidatePath('/interne/stock')
+    revalidatePath("/interne/employees")
+    revalidatePath("/interne")
+    revalidatePath("/interne/employees")
+    revalidatePath("/interne/products")
+    revalidatePath("/interne/sales")
+    revalidatePath("/interne/stock")
 
     return {
-      message: 'Les modification ont été enregistré avec success',
+      message: "Les modification ont été enregistré avec success",
       ok: true,
     }
   } catch (error) {
@@ -292,11 +300,11 @@ export const getWorkerRoles = async () => {
       select: {
         role: true,
       },
-      distinct: ['role'],
+      distinct: ["role"],
     })
-    return roles.map((r) => r.role).filter((role) => role && role.trim() !== '')
+    return roles.map((r) => r.role).filter((role) => role && role.trim() !== "")
   } catch (error) {
-    console.error('Error fetching roles:', error)
+    console.error("Error fetching roles:", error)
     return []
   }
 }
@@ -308,19 +316,23 @@ export const updateWorkerContract = async ({
   contractDuration,
 }: {
   id: string
-  status?: 'ACTIF' | 'INACTIF' | 'FIRED' | 'TIMEOFF' | 'VACATION' | 'SICK_LEAVE'
+  status?: "ACTIF" | "INACTIF" | "FIRED" | "TIMEOFF" | "VACATION" | "SICK_LEAVE"
   officialEnd?: Date
   contractDuration?: string
 }) => {
   try {
     const session = await isAuthed()
-    if (!session || (session.user.role !== 'superadmin' && session.user.workRole?.toLowerCase() !== 'assistant administratif')) {
+    if (
+      !session ||
+      (session.user.role !== "superadmin" &&
+        session.user.workRole?.toLowerCase() !== "assistant administratif")
+    ) {
       return { ok: false, message: "Non autorisé" }
     }
 
     const worker = await prisma.worker.findUnique({
       where: { id },
-      select: { userId: true, email: true, name: true }
+      select: { userId: true, email: true, name: true },
     })
 
     if (!worker) {
@@ -337,14 +349,29 @@ export const updateWorkerContract = async ({
     })
 
     // Prepare notification messages
-    const isExtension = status === 'ACTIF' && (officialEnd || contractDuration)
-    const title = isExtension ? "Prolongation de contrat" : "Mise à jour de votre contrat"
+    const isExtension = status === "ACTIF" && (officialEnd || contractDuration)
+    const title = isExtension
+      ? "Prolongation de contrat"
+      : "Mise à jour de votre contrat"
     let body = ""
-    
+
     if (isExtension) {
-      body = `Votre contrat a été prolongé${contractDuration ? ` pour une durée de ${contractDuration} mois` : ""}${officialEnd ? ` jusqu'au ${officialEnd.toLocaleDateString('fr-FR')}` : ""}.`
+      body = `Votre contrat a été prolongé${contractDuration ? ` pour une durée de ${contractDuration} mois` : ""}${officialEnd ? ` jusqu'au ${officialEnd.toLocaleDateString("fr-FR")}` : ""}.`
     } else {
-      const statusLabel = status === 'INACTIF' ? 'clôturé' : status === 'TIMEOFF' ? 'mis en pause' : status === 'FIRED' ? 'résilié' : status === 'SICK_LEAVE' ? 'en congé maladie' : status === 'VACATION' ? 'en congés' : status === 'ACTIF' ? 'réactivé' : status
+      const statusLabel =
+        status === "INACTIF"
+          ? "clôturé"
+          : status === "TIMEOFF"
+            ? "mis en pause"
+            : status === "FIRED"
+              ? "résilié"
+              : status === "SICK_LEAVE"
+                ? "en congé maladie"
+                : status === "VACATION"
+                  ? "en congés"
+                  : status === "ACTIF"
+                    ? "réactivé"
+                    : status
       body = `Votre contrat a été mis à jour. Nouveau statut : ${statusLabel}.`
     }
 
@@ -354,14 +381,14 @@ export const updateWorkerContract = async ({
         data: {
           title,
           body,
-          type: 'CONTRACT',
+          type: "CONTRACT",
           emitterId: worker.userId,
-          readByIds: []
-        }
+          readByIds: [],
+        },
       })
     }
 
-  /*  // Email notification
+    /*  // Email notification
     try {
       const { sendEmail } = await import('@/lib/notifications/email')
       await sendEmail({
@@ -374,7 +401,8 @@ export const updateWorkerContract = async ({
       // We don't fail the whole operation if email fails
     }*/
 
-    revalidatePath('/interne/employees')
+    revalidatePath("/interne")
+    revalidatePath("/interne/employees")
     return { ok: true, message: "Contrat mis à jour et notifications envoyées" }
   } catch (error) {
     console.error(error)

@@ -1,17 +1,29 @@
 "use client"
 
 import React, { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Mail, Phone, ExternalLink, Activity, ListTodo } from "lucide-react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { useQueryClient } from "@tanstack/react-query"
 import { cn } from "@/lib/utils"
+import type { Worker } from "@/generated/prisma/client"
 import { WorkerData } from "@/lib/hooks/useWorkers"
 import ListMenu from "@/components/ui/listMenu"
 import { deleteWorker } from "@/lib/actions/workers/addWorker"
 import { authClient } from "@/lib/auth-client"
-import { getStatusLabel, getContractTypeLabel } from "@/lib/utils/employeeStatusColors"
+import {
+  getStatusLabel,
+  getContractTypeLabel,
+} from "@/lib/utils/employeeStatusColors"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
@@ -31,6 +43,8 @@ interface EmployeeCardProps {
 
 export const EmployeeCard = ({ worker }: EmployeeCardProps) => {
   const { data: session } = authClient.useSession()
+  const queryClient = useQueryClient()
+  const router = useRouter()
   const [isAssignOpen, setIsAssignOpen] = useState(false)
 
   const initials = worker.name
@@ -51,10 +65,14 @@ export const EmployeeCard = ({ worker }: EmployeeCardProps) => {
       : null
 
   const isNearEnd = officialEnd
-    ? (officialEnd.getTime() - new Date().getTime()) < 14 * 24 * 60 * 60 * 1000 && (officialEnd.getTime() - new Date().getTime()) > 0
+    ? officialEnd.getTime() - new Date().getTime() < 14 * 24 * 60 * 60 * 1000 &&
+      officialEnd.getTime() - new Date().getTime() > 0
     : false
 
-  const statusVariants: Record<string, "secondary" | "destructive" | "default" | "outline"> = {
+  const statusVariants: Record<
+    string,
+    "secondary" | "destructive" | "default" | "outline"
+  > = {
     ACTIF: "secondary",
     INACTIF: "destructive",
     FIRED: "destructive",
@@ -64,6 +82,27 @@ export const EmployeeCard = ({ worker }: EmployeeCardProps) => {
   }
 
   const isAdmin = session?.user?.role === "superadmin"
+  const workerForDialog = worker as unknown as Worker
+  const workAccount = worker.workAccount as
+    | (NonNullable<WorkerData["workAccount"]> & { particularRole?: string[] })
+    | undefined
+  const workerWithAccount = workerForDialog as Worker & {
+    workAccount: { id: string; banned?: boolean | null } | null
+  }
+
+  const handleDelete = async (id: string) => {
+    const result = await deleteWorker(id)
+
+    if (result.ok) {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workers"] }),
+        queryClient.invalidateQueries({ queryKey: ["workerStats"] }),
+      ])
+      router.refresh()
+    }
+
+    return result
+  }
 
   return (
     <Card className="relative overflow-hidden border bg-card transition-all hover:shadow-md dark:border-slate-800">
@@ -71,14 +110,20 @@ export const EmployeeCard = ({ worker }: EmployeeCardProps) => {
         <div className="flex w-full justify-between">
           <Avatar className="size-16 border dark:border-slate-800">
             <AvatarImage src={worker.image ?? ""} className="object-cover" />
-            <AvatarFallback className="bg-muted text-lg font-semibold">{initials}</AvatarFallback>
+            <AvatarFallback className="bg-muted text-lg font-semibold">
+              {initials}
+            </AvatarFallback>
           </Avatar>
 
           <ListMenu
             itemId={worker.id}
-            deleteAction={() => deleteWorker(worker.id)}
+            deleteAction={handleDelete}
             showDelete={isAdmin}
-            showEdit={isAdmin || session?.user?.workRole?.toLowerCase() === "assistant administratif"}
+            showEdit={
+              isAdmin ||
+              session?.user?.workRole?.toLowerCase() ===
+                "assistant administratif"
+            }
             page="worker"
             data={worker}
           >
@@ -87,24 +132,27 @@ export const EmployeeCard = ({ worker }: EmployeeCardProps) => {
                 {/* Groupe 1: Administration & Accès */}
                 {isAdmin && (
                   <div className="flex flex-col space-y-1">
-                    <p className="mb-1 px-1 text-[10px] font-bold uppercase tracking-tight text-slate-400">
+                    <p className="mb-1 px-1 text-[10px] font-bold tracking-tight text-slate-400 uppercase">
                       Administration & Accès
                     </p>
-                    <SetAdminDialog data={worker as any} isAlready={worker.workAccount?.role === "admin"} />
+                    <SetAdminDialog
+                      data={workerWithAccount}
+                      isAlready={workAccount?.role === "admin"}
+                    />
 
-                    {worker.workAccount && (
+                    {workAccount && (
                       <>
                         <PageAccessDialog
-                          userId={worker.workAccount.id}
+                          userId={workAccount.id}
                           userName={worker.name}
-                          initialAccess={(worker as any).workAccount?.pageAccess || []}
-                          userRole={worker.workAccount.role}
+                          initialAccess={workAccount.pageAccess || []}
+                          userRole={workAccount.role}
                         />
 
                         <ParticularRoleDialog
-                          workerId={worker.workAccount.id}
+                          workerId={workAccount.id}
                           userName={worker.name}
-                          initialRoles={(worker as any).workAccount?.particularRole || []}
+                          initialRoles={workAccount.particularRole || []}
                         />
 
                         <ResetPasswordDialog
@@ -120,7 +168,7 @@ export const EmployeeCard = ({ worker }: EmployeeCardProps) => {
 
                 {/* Groupe 2: Gestion & Activité */}
                 <div className="flex flex-col space-y-1">
-                  <p className="mb-1 px-1 text-[10px] font-bold uppercase tracking-tight text-slate-400">
+                  <p className="mb-1 px-1 text-[10px] font-bold tracking-tight text-slate-400 uppercase">
                     Gestion & Activité
                   </p>
                   {isAdmin && (
@@ -149,16 +197,29 @@ export const EmployeeCard = ({ worker }: EmployeeCardProps) => {
                 </div>
 
                 {/* Groupe 3: Statut & Contrat */}
-                {(isAdmin || session?.user?.workRole?.toLowerCase() === "assistant administratif") && (
+                {(isAdmin ||
+                  session?.user?.workRole?.toLowerCase() ===
+                    "assistant administratif") && (
                   <>
                     <Separator className="my-2" />
                     <div className="flex flex-col space-y-1">
-                      <p className="mb-1 px-1 text-[10px] font-bold uppercase tracking-tight text-slate-400">
+                      <p className="mb-1 px-1 text-[10px] font-bold tracking-tight text-slate-400 uppercase">
                         Statut & Contrat
                       </p>
-                      <PauseActivityDialog data={worker as any} />
-                      <ContractEndDialog data={worker as any} />
-                      {isAdmin && <BanWorkerDialog data={worker as any} />}
+                      <PauseActivityDialog data={workerForDialog} />
+                      <ContractEndDialog data={workerForDialog} />
+                      {isAdmin && (
+                        <BanWorkerDialog
+                          data={
+                            workerWithAccount as Worker & {
+                              workAccount: {
+                                id: string
+                                banned: boolean | null
+                              } | null
+                            }
+                          }
+                        />
+                      )}
                     </div>
                   </>
                 )}
@@ -170,14 +231,18 @@ export const EmployeeCard = ({ worker }: EmployeeCardProps) => {
         <div className="mt-4 flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <CardTitle className="text-lg leading-none">{worker.name}</CardTitle>
-              <Badge 
-                variant={statusVariants[worker.status] || "default"} 
-                className={cn("h-4 px-1.5 py-0 text-[10px]", 
-                  worker.status === "ACTIF" && "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 border-none"
+              <CardTitle className="text-lg leading-none">
+                {worker.name}
+              </CardTitle>
+              <Badge
+                variant={statusVariants[worker.status] || "default"}
+                className={cn(
+                  "h-4 px-1.5 py-0 text-[10px]",
+                  worker.status === "ACTIF" &&
+                    "border-none bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
                 )}
               >
-                {getStatusLabel(worker.status as any)}
+                {getStatusLabel(worker.status)}
               </Badge>
             </div>
             <CardDescription className="mt-1.5 text-sm font-medium text-muted-foreground">
@@ -203,7 +268,9 @@ export const EmployeeCard = ({ worker }: EmployeeCardProps) => {
 
         <div className="grid grid-cols-2 gap-y-2 text-[13px]">
           <span className="text-muted-foreground">Type de contrat</span>
-          <span className="text-right font-medium">{getContractTypeLabel(worker.type)}</span>
+          <span className="text-right font-medium">
+            {getContractTypeLabel(worker.type)}
+          </span>
 
           <span className="text-muted-foreground">Embauché le</span>
           <span className="text-right font-medium">
@@ -215,8 +282,15 @@ export const EmployeeCard = ({ worker }: EmployeeCardProps) => {
           </span>
 
           <span className="text-muted-foreground">Fin de contrat</span>
-          <span className={cn("text-right font-medium", isNearEnd ? "text-red-500 font-bold animate-pulse" : "text-foreground")}>
-            {officialEnd 
+          <span
+            className={cn(
+              "text-right font-medium",
+              isNearEnd
+                ? "animate-pulse font-bold text-red-500"
+                : "text-foreground"
+            )}
+          >
+            {officialEnd
               ? officialEnd.toLocaleDateString("fr-FR", {
                   day: "numeric",
                   month: "short",
@@ -226,11 +300,13 @@ export const EmployeeCard = ({ worker }: EmployeeCardProps) => {
           </span>
         </div>
 
-        {(isAdmin || session?.user?.workRole?.toLowerCase() === "assistant administratif") && (
-          <div className="mt-2 border-t pt-2 transition-all animate-in fade-in slide-in-from-top-1 duration-500">
-             <p className="mb-2 text-[10px] font-bold uppercase tracking-tight text-slate-400">
-                Infos Administration
-              </p>
+        {(isAdmin ||
+          session?.user?.workRole?.toLowerCase() ===
+            "assistant administratif") && (
+          <div className="mt-2 animate-in border-t pt-2 transition-all duration-500 fade-in slide-in-from-top-1">
+            <p className="mb-2 text-[10px] font-bold tracking-tight text-slate-400 uppercase">
+              Infos Administration
+            </p>
             <div className="flex justify-between text-[13px]">
               <span className="text-muted-foreground">Salaire Net</span>
               <span className="font-semibold text-emerald-600 dark:text-emerald-400">

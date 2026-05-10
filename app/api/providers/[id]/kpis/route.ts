@@ -3,13 +3,13 @@ import { NextResponse } from "next/server"
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const providerId = params.id
+  const { id } = await params
 
   try {
     const purchases = await prisma.purchase.findMany({
-      where: { providerId },
+      where: { providerId: id },
       include: {
         purchaseItems: true,
       },
@@ -17,17 +17,23 @@ export async function GET(
 
     const totalSpent = purchases.reduce((acc, p) => acc + p.totalAmount, 0)
     const totalPurchases = purchases.length
-    const pendingCount = purchases.filter(p => p.status === 'PAYMENT_DONE').length
+    const pendingCount = purchases.filter(
+      (p) => p.status === "PAYMENT_DONE"
+    ).length
 
     // Average delivery delay
-    const deliveredPurchases = purchases.filter(p => p.status === 'CONFIRMED' || p.status === 'DELIVERED')
+    const deliveredPurchases = purchases.filter(
+      (p) => p.status === "CONFIRMED" || p.status === "DELIVERED"
+    )
     let averageDeliveryDelay = 0
     if (deliveredPurchases.length > 0) {
-        const totalDelay = deliveredPurchases.reduce((acc, p) => {
-            const delay = (p.updatedAt.getTime() - p.purchaseDate.getTime()) / (1000 * 60 * 60 * 24)
-            return acc + delay
-        }, 0)
-        averageDeliveryDelay = totalDelay / deliveredPurchases.length
+      const totalDelay = deliveredPurchases.reduce((acc, p) => {
+        const delay =
+          (p.updatedAt.getTime() - p.purchaseDate.getTime()) /
+          (1000 * 60 * 60 * 24)
+        return acc + delay
+      }, 0)
+      averageDeliveryDelay = totalDelay / deliveredPurchases.length
     }
 
     return NextResponse.json({
@@ -38,6 +44,9 @@ export async function GET(
     })
   } catch (error) {
     console.error("Error fetching provider KPIs:", error)
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 }
+    )
   }
 }

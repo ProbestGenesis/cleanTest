@@ -109,10 +109,12 @@ function AddWorkerDialog({ isOpen, onClose, type, data }: Props) {
     }
   }, [data])
 
-  const invalidateWorkers = () => {
-    queryClient.invalidateQueries({ queryKey: ["workers"] })
-    queryClient.invalidateQueries({ queryKey: ["workerStats"] })
-    queryClient.invalidateQueries({ queryKey: ["workerRoles"] })
+  const invalidateWorkers = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["workers"] }),
+      queryClient.invalidateQueries({ queryKey: ["workerStats"] }),
+      queryClient.invalidateQueries({ queryKey: ["workerRoles"] }),
+    ])
   }
 
   const clearMessage = () => {
@@ -165,15 +167,15 @@ function AddWorkerDialog({ isOpen, onClose, type, data }: Props) {
       setMessage({ ok, text: message })
 
       if (ok) {
+        form.reset()
+        await invalidateWorkers()
+        router.refresh()
         setTimeout(() => {
           clearMessage()
           onClose()
           setMatricule(matricule as string)
           setShowMatriculeDialog(true)
         }, 1000)
-        form.reset()
-        invalidateWorkers()
-        router.refresh()
       }
     })
   }
@@ -188,13 +190,13 @@ function AddWorkerDialog({ isOpen, onClose, type, data }: Props) {
       setMessage({ ok, text: message })
 
       if (ok) {
+        form.reset()
+        await invalidateWorkers()
+        router.refresh()
         setTimeout(() => {
           clearMessage()
           onClose()
         }, 1000)
-        form.reset()
-        invalidateWorkers()
-        router.refresh()
         return
       }
     })

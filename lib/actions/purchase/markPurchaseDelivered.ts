@@ -41,8 +41,8 @@ export const markPurchaseDelivered = async (
       include: {
         purchaseItems: {
           include: {
-            product: true
-          }
+            product: true,
+          },
         },
         validationCode: true,
       },
@@ -74,23 +74,23 @@ export const markPurchaseDelivered = async (
 
       // On met à jour l'historique de stock pour chaque item
       for (const item of purchase.purchaseItems) {
-          const stockHistory = await tx.stockEditHistorique.findFirst({
-              where: {
-                  purchaseId: purchase.id,
-                  productId: item.productId!,
-                  status: 'PENDING_VALIDATION'
-              }
-          })
+        const stockHistory = await tx.stockEditHistorique.findFirst({
+          where: {
+            purchaseId: purchase.id,
+            productId: item.productId!,
+            status: "PENDING_VALIDATION",
+          },
+        })
 
-          if (stockHistory) {
-              await tx.stockEditHistorique.update({
-                  where: { id: stockHistory.id },
-                  data: {
-                      status: 'AWAITING_CONFIRMATION',
-                      actualQuantity: item.product?.quantity || 0,
-                  }
-              })
-          }
+        if (stockHistory) {
+          await tx.stockEditHistorique.update({
+            where: { id: stockHistory.id },
+            data: {
+              status: "AWAITING_CONFIRMATION",
+              actualQuantity: item.product?.quantity || 0,
+            },
+          })
+        }
       }
 
       if (validationWorkers.length > 0 && purchase.validationCode) {
@@ -103,7 +103,7 @@ export const markPurchaseDelivered = async (
               : [],
             type: "PURCHASE",
             title: "Livraison d’achat à confirmer",
-            body: `${worker.name} a déclaré la livraison de l'achat "${purchase.designation || purchase.category}". Code: ${purchase.validationCode.code}`,
+            body: `${worker.name} a déclaré la livraison de l'achat "${purchase.purchaseItems.map((item) => item.productName).join(", ")}". Code: ${purchase.validationCode.code}`,
             link: "/interne/purchases",
           },
         })

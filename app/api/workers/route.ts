@@ -1,36 +1,53 @@
-import { prisma } from '@/lib/prisma'
-import { NextRequest, NextResponse } from 'next/server'
-import { CACHE_CONFIG } from '@/lib/constants/caching'
+import { prisma } from "@/lib/prisma"
+import type {
+  Prisma,
+  WorkerStatus,
+  WorkerType,
+} from "@/generated/prisma/client"
+import { NextRequest, NextResponse } from "next/server"
+export const dynamic = "force-dynamic"
 
-export const dynamic = 'force-dynamic'
+const workerTypes: WorkerType[] = ["CDI", "CDD", "TRAINEE"]
+const workerStatuses: WorkerStatus[] = [
+  "ACTIF",
+  "INACTIF",
+  "FIRED",
+  "TIMEOFF",
+  "VACATION",
+  "SICK_LEAVE",
+]
 
+const isWorkerType = (value: string): value is WorkerType =>
+  workerTypes.includes(value as WorkerType)
 
+const isWorkerStatus = (value: string): value is WorkerStatus =>
+  workerStatuses.includes(value as WorkerStatus)
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status')
-    const search = searchParams.get('search')?.toLowerCase()
-    const type = searchParams.get('type')
+    const { searchParams } = new URL(request.url)
+    const status = searchParams.get("status")
+    const search = searchParams.get("search")?.toLowerCase()
+    const type = searchParams.get("type")
 
-    let whereClause: any = {}
+    const whereClause: Prisma.WorkerWhereInput = {}
 
     // Filtrer par type (CDI, CDD, TRAINEE)
-    if (type) {
+    if (type && isWorkerType(type)) {
       whereClause.type = type
     }
 
     // Filtrer par statut
-    if (status && status !== 'all') {
-      if (status === 'active') {
+    if (status && status !== "all") {
+      if (status === "active") {
         whereClause.status = {
-          in: ['ACTIF', 'TIMEOFF', 'VACATION', 'SICK_LEAVE'],
+          in: ["ACTIF", "TIMEOFF", "VACATION", "SICK_LEAVE"],
         }
-      } else if (status === 'inactive') {
+      } else if (status === "inactive") {
         whereClause.status = {
-          in: ['INACTIF', 'FIRED'],
+          in: ["INACTIF", "FIRED"],
         }
-      } else {
+      } else if (isWorkerStatus(status)) {
         whereClause.status = status
       }
     }
@@ -38,20 +55,20 @@ export async function GET(request: NextRequest) {
     // Filtrer par recherche (nom, email, téléphone)
     if (search) {
       whereClause.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
-        { phone: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" } },
+        { phone: { contains: search, mode: "insensitive" } },
       ]
     }
 
     // Exclure les Directeurs et les Superadmins
     whereClause.NOT = [
-      { role: { equals: 'Directeur', mode: 'insensitive' } },
+      { role: { equals: "Directeur", mode: "insensitive" } },
       {
         workAccount: {
           OR: [
-            { role: { equals: 'superadmin', mode: 'insensitive' } },
-            { workRole: { equals: 'Directeur', mode: 'insensitive' } },
+            { role: { equals: "superadmin", mode: "insensitive" } },
+            { workRole: { equals: "Directeur", mode: "insensitive" } },
           ],
         },
       },
@@ -66,11 +83,10 @@ export async function GET(request: NextRequest) {
             role: true,
             banned: true,
             pageAccess: true,
-            
           },
         },
       },
-      orderBy: [{ status: 'asc' }, { name: 'asc' }],
+      orderBy: [{ status: "asc" }, { name: "asc" }],
     })
 
     return NextResponse.json(
@@ -81,16 +97,16 @@ export async function GET(request: NextRequest) {
       },
       {
         headers: {
-          'Cache-Control': CACHE_CONFIG.API.workers,
+          "Cache-Control": "no-store",
         },
       }
     )
   } catch (error) {
-    console.error('Error fetching workers:', error)
+    console.error("Error fetching workers:", error)
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to fetch workers',
+        error: "Failed to fetch workers",
       },
       { status: 500 }
     )
