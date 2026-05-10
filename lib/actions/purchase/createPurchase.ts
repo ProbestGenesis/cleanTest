@@ -25,12 +25,6 @@ export const addPurchase = async (value: z.infer<typeof PurchaseSchema>) => {
     }
 
     const workerId = workerAccount.worker.id
-    // Conversion de la quantité de String (Purchase) vers Int (Product & Historique)
-    const numericQuantity = value.quantity
-
-    if (numericQuantity <= 0) {
-      return { ok: false, message: 'La quantité doit être supérieure à 0.' }
-    }
 
     let blobUrls: string[] = []
 
@@ -38,7 +32,7 @@ export const addPurchase = async (value: z.infer<typeof PurchaseSchema>) => {
       const uploadResults = await Promise.all(
         value.images.map((image) => {
           if (typeof image === 'string') return { url: image }
-          return uploadImage({ filename: `${Date.now()}-${image.name}`, image })
+          return uploadImage({ filename: `purchase-${Date.now()}-${image.name}`, image })
         })
       )
 
@@ -68,9 +62,7 @@ export const addPurchase = async (value: z.infer<typeof PurchaseSchema>) => {
       invoiceUrl = res.url
     }
 
-
-    // Gestion du fournisseur : si on a un providerId, on l'utilise. 
-    // Sinon, si on a un provider (nom), on essaie de trouver ou créer un Provider record
+    // Gestion du fournisseur
     let finalProviderId = value.providerId
     let finalProviderName = value.provider || ''
 
@@ -94,118 +86,143 @@ export const addPurchase = async (value: z.infer<typeof PurchaseSchema>) => {
       }
     }
 
-    // Utilisation d'une transaction pour garantir l'intégrité des créations / mises à jour
-    let createdProductId: string | undefined
+    const calculatedTotalAmount = value.items.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0)
+    const totalAmount = value.totalAmount || calculatedTotalAmount
 
-    await prisma.$transaction(async (tx) => {
-      // 1. Création de l'achat
-      const existingPurchase = await tx.purchase.findFirst({
-        where: {
-          invoiceNumber: value.invoiceNumber || null,
-          provider: finalProviderName,
-          date: value.date,
-        },
-        select: { id: true },
-      })
-
-      if (existingPurchase) {
-        throw new Error("Un achat avec les mêmes informations existe déjà")
-      }
-
-      const productRecord =
-        value.productId != null && value.productId !== ''
-          ? await tx.product.update({
-              where: { id: value.productId },
-              data: {
-                purchasePrice: value.unityPrice,
-                sellingPrice: value.estimatePrice,
-                category: value.category,
-                brand: value.brand,
-                unity: value.unity,
-                country: value.country,
-              },
-            })
-          : await tx.product.create({
-              data: {
-                name: value.designation || value.category,
-                designation: value.designation,
-                code: buildProductCodeFromOccurrence(
-                  value.category,
-                  (await tx.product.count({
-                    where: {
-                      category: value.category,
-                    },
-                  })) + 1
-                ),
-                category: value.category,
-                sector: value.type,
-                brand: value.brand,
-                country: value.country,
-                unity: value.unity,
-                purchasePrice: value.unityPrice,
-                sellingPrice: value.estimatePrice,
-                quantity: 0,
-                workerId: workerId,
-                userId: id,
-                images: blobUrls,
-              },
-            })
-
-      createdProductId = productRecord.id
-
-      await tx.purchase.create({
+    const purchase = await prisma.$transaction(async (tx) => {
+      // 1. Création de l'achat (Header)
+      const purchase = await tx.purchase.create({
         data: {
           status: 'PAYMENT_DONE',
-          provider: finalProviderName,
-          providerId: finalProviderId || null,
-          date: value.date,
-          dueDate: value.dueDate || null,
-          type: value.type ?? "Achat",
+          providerId: finalProviderId!,
+          authorId: workerId,
+          userId: id,
+          totalAmount: totalAmount,
+          amountPaid: value.amountPaid || 0,
+          isPaid: (value.amountPaid || 0) >= totalAmount,
+          dueDate: value.dueDate ? new Date(value.dueDate) : null,
+          purchaseDate: new Date(value.date),
+          type: value.type,
           category: value.category,
           brand: value.brand,
           country: value.country,
           description: value.description,
           quantity: value.quantity,
-          receivedQuantity: value.receivedQuantity ?? 0,
-          interests: value.interests ?? 0,
+          receivedQuantity: value.receivedQuantity,
+          interests: value.interests,
           unity: value.unity,
           unityPrice: value.unityPrice,
           estimatePrice: value.estimatePrice,
-          paymentMethod: value.paymentMethod || null,
-          contact: value.contact || '',
-          NIF: value.NIF || null,
-          invoiceNumber: value.invoiceNumber || null,
-          amountET: value.amountET ?? null,
-          designation: value.designation || null,
-          TVA: value.TVA ?? null,
-          emountTTC: value.emountTTC ?? null,
-          authorId: workerId,
-          userId: id,
+          paymentMethod: value.paymentMethod,
+          contact: value.contact,
+          NIF: value.NIF,
+          invoiceNumber: value.invoiceNumber,
+          amountET: value.amountET,
+          designation: value.designation,
+          TVA: value.TVA,
+          emountTTC: value.emountTTC,
           images: blobUrls,
-          invoiceImage: invoiceUrl || null,
-          productId: createdProductId,
-          projectId: value.projectId || null,
+          invoiceImage: invoiceUrl,
+          projectId: value.projectId,
         },
       })
+
+      // 2. Création des articles de l'achat et mise à jour/création des produits
+      for (const item of value.items) {
+        let productId = item.productId
+
+        if (!productId) {
+          // Créer un nouveau produit si non existant
+          const product = await tx.product.create({
+            data: {
+              name: item.productName,
+              designation: item.productName,
+              code: buildProductCodeFromOccurrence(
+                value.category || 'GENERAL',
+                (await tx.product.count({
+                  where: { category: value.category || 'GENERAL' },
+                })) + 1
+              ),
+              category: value.category || 'GENERAL',
+              sector: 'INDUSTRIAL',
+              brand: value.brand,
+              country: value.country,
+              unity: value.unity,
+              purchasePrice: item.unitPrice,
+              sellingPrice: value.estimatePrice || 0,
+              quantity: 0,
+              workerId: workerId,
+              userId: id,
+            },
+          })
+          productId = product.id
+        } else {
+            // Mettre à jour le prix d'achat si le produit existe
+            await tx.product.update({
+                where: { id: productId },
+                data: {
+                    purchasePrice: item.unitPrice,
+                }
+            })
+        }
+
+        const purchaseItem = await tx.purchaseItem.create({
+          data: {
+            purchaseId: purchase.id,
+            productId: productId,
+            productName: item.productName,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.quantity * item.unitPrice,
+          },
+        })
+
+        // 3. Création de l'historique de stock (PENDING_VALIDATION)
+        await tx.stockEditHistorique.create({
+          data: {
+            userId: id,
+            workerId: workerId,
+            productId: productId!,
+            type: 'PURCHASE',
+            quantityToApply: item.quantity,
+            actualQuantity: 0,
+            status: 'PENDING_VALIDATION',
+            purchaseId: purchase.id,
+            purchaseItems: {
+                connect: { id: purchaseItem.id }
+            },
+            reason: `Achat - ${purchase.invoiceNumber || purchase.id}`,
+          },
+        })
+      }
+
+      // 4. Génération du code de validation
+      const validationCode = Math.floor(100000 + Math.random() * 900000).toString()
+      await tx.validationCode.create({
+        data: {
+          code: validationCode,
+          type: 'PURCHASE',
+          purchaseId: purchase.id,
+        },
+      })
+
+      return purchase
     })
 
-    // Revalidation des pages Next.js
-    revalidatePath('/interne')
     revalidatePath('/interne/purchases')
-    revalidatePath('/interne/accounting')
+    revalidatePath('/purchases')
     revalidatePath('/interne/stock')
 
-    // Notification aux superadmins
     await notifySuperAdmins({
       emitterId: id,
       title: 'Nouvel achat enregistré',
-      body: `Un achat de ${numericQuantity} ${value.unity} pour "${value.designation || value.category}" a été enregistré par ${workerAccount.name}.`,
-      link: '/interne/purchases',
+      body: `Un achat de ${value.items.length} articles a été enregistré par ${workerAccount.name}.`,
+      link: '/purchases',
     })
 
     return {
       ok: true,
-      message: "L'achat a été enregistré. La confirmation inventaire mettra ensuite le stock à jour.",
+      message: "L'achat a été enregistré. Le code de validation est nécessaire pour mettre à jour le stock.",
     }
   } catch (error) {
     console.error("Erreur lors de l'ajout de l'achat:", error)
@@ -235,8 +252,8 @@ const notifySuperAdmins = async ({
     data: {
       title,
       body,
-      type: 'PURCHASE', // Ou un type spécifique aux achats si existant, TYPE ACCOUNTING semble approprié ici
-      link: link ?? '/interne/purchases',
+      type: 'PURCHASE',
+      link: link ?? '/purchases',
       emitter: { connect: { id: emitterId } },
       receiptIds,
       readByIds: receiptIds.includes(emitterId) ? [emitterId] : [],

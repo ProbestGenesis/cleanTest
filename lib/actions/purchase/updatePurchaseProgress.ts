@@ -34,7 +34,7 @@ export const updatePurchaseProgress = async (input: UpdateProgressInput) => {
     const workerId = user.worker.id
 
     const res = await prisma.$transaction(async (tx) => {
-      // 1. Fetch current purchase to check for changes
+      // 1. Fetch current purchase
       const purchase = await tx.purchase.findUnique({
         where: { id: input.purchaseId },
         select: { 
@@ -44,19 +44,26 @@ export const updatePurchaseProgress = async (input: UpdateProgressInput) => {
           providerId: true, 
           invoiceNumber: true,
           receivedQuantity: true,
-          quantity: true
+          quantity: true,
+          totalAmount: true,
+          amountPaid: true
         }
       })
 
       if (!purchase) throw new Error("Achat introuvable")
+
+      const newAmountPaid = (purchase.amountPaid || 0) + (input.amountPaid || 0)
 
       // 2. Update purchase fields
       const updatedPurchase = await tx.purchase.update({
         where: { id: input.purchaseId },
         data: {
           interests: input.interests !== undefined ? input.interests : undefined,
-          dueDate: input.dueDate || undefined,
+          dueDate: input.dueDate ? new Date(input.dueDate) : undefined,
           receivedQuantity: input.receivedQuantity !== undefined ? input.receivedQuantity : undefined,
+          amountPaid: newAmountPaid,
+          isPaid: newAmountPaid >= purchase.totalAmount,
+          paymentDate: input.amountPaid ? new Date() : undefined
         },
       })
 
@@ -78,7 +85,7 @@ export const updatePurchaseProgress = async (input: UpdateProgressInput) => {
         }
       }
 
-      // 4. Send notification if quantity or payment was updated
+      // 4. Send notification
       const superAdmins = await tx.user.findMany({
         where: { role: 'superadmin' },
         select: { id: true },
