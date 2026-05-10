@@ -125,17 +125,16 @@ function StockOutDialog({
   }, [product, providedProducts])
 
   const form = useForm({
-    defaultValues: operationType === "STOCK_OUT" 
-      ? { items: initialStockOutItems }
-      : {
-          name: "",
-          type: "DIRECT",
-          items: initialSellItems,
-        },
+    defaultValues:
+      operationType === "STOCK_OUT"
+        ? { items: initialStockOutItems }
+        : {
+            name: "",
+            type: "DIRECT",
+            items: initialSellItems,
+          },
     resolver: zodResolver(
-      operationType === "STOCK_OUT" 
-        ? bulkStockOutRequest as z.ZodSchema
-        : (sellProducts as z.ZodSchema)
+      operationType === "STOCK_OUT" ? bulkStockOutRequest : sellProducts
     ),
     mode: "onChange",
     reValidateMode: "onChange",
@@ -185,10 +184,11 @@ function StockOutDialog({
     onClose()
   }
 
-  const onSubmit = (value: z.infer<typeof bulkStockOutRequest> | z.infer<typeof sellProducts>) => {
+  const onSubmit = (value: unknown) => {
     startTransition(async () => {
       // Check availability
-      for (const item of value.items) {
+      const items = (value as any).items || []
+      for (const item of items) {
         const availability = availabilityById[item.productId]
         if (availability && item.quantity > availability.available) {
           setMessage({
@@ -240,9 +240,10 @@ function StockOutDialog({
 
   const sharedDestination = form.watch("items.0.destination") ?? ""
   const sharedReason = form.watch("items.0.reason") ?? ""
-  const sharedDestinationError =
-    form.formState.errors.items?.[0]?.destination?.message
-  const sharedReasonError = form.formState.errors.items?.[0]?.reason?.message
+  const sharedDestinationError = (form.formState.errors.items as any)?.[0]
+    ?.destination?.message
+  const sharedReasonError = (form.formState.errors.items as any)?.[0]?.reason
+    ?.message
 
   const updateSharedDestination = (value: string) => {
     fields.forEach((_, index) => {
@@ -503,12 +504,13 @@ function StockOutDialog({
                                     ))}
                                   </SelectContent>
                                 </Select>
-                                {form.formState.errors.items?.[index]
+                                {(form.formState.errors.items as any)?.[index]
                                   ?.productId && (
                                   <FieldError>
                                     {
-                                      form.formState.errors.items[index]
-                                        ?.productId?.message
+                                      (form.formState.errors.items as any)[
+                                        index
+                                      ]?.productId?.message
                                     }
                                   </FieldError>
                                 )}
@@ -551,11 +553,11 @@ function StockOutDialog({
                                     </strong>
                                   </p>
                                 </div>
-                                {form.formState.errors.items?.[index]
+                                {(form.formState.errors.items as any)?.[index]
                                   ?.quantity && (
                                   <FieldError>
                                     {
-                                      form.formState.errors.items[index]
+                                      (form.formState.errors.items as any)[index]
                                         ?.quantity?.message
                                     }
                                   </FieldError>
