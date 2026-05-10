@@ -914,6 +914,12 @@ model Purchase {
   // Relations existantes
   stockEditHistorique StockEditHistorique[]
   providerPayment     ProviderPayment[]
+  
+  // Relations ajoutées pour les erreurs
+  workerId            String?
+  worker              Worker?             @relation(fields: [workerId], references: [id])
+  projectId           String?
+  project             Project?            @relation(fields: [projectId], references: [id])
   validationCode      ValidationCode?
 
   @@map("purchase")
@@ -926,6 +932,8 @@ model PurchaseItem {
   productId   String?
   product     Product?  @relation(fields: [productId], references: [id]) // Peut être null si le produit n'est pas encore dans le catalogue
   productName String // Nom du produit au moment de l'achat (pour les nouveaux ou si le nom change)
+  stockEditHistorique StockEditHistorique? @relation(fields: [stockEditHistoriqueId], references: [id])
+  stockEditHistoriqueId String? @unique
   quantity    Int
   unitPrice   Float
   totalPrice  Float // Prix total pour cette ligne d'article (quantity * unitPrice)
