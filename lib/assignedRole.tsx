@@ -1,0 +1,4 @@
+
+
+export const CHARGER_DU_STOCK =  "CHARGER_DU_STOCK"
+export const  CHARGER_DU_POINTAGE = "CHARGER_DU_POINTAGE"

@@ -1,0 +1,1212 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+enum Status {
+  ACTIVE
+  INACTIVE
+}
+enum SaleStatus {
+  DELIVERED
+  PENDING
+}
+
+enum PurchaseStatus {
+  PAYMENT_DONE
+  DELIVERED
+  CONFIRMED
+}
+
+enum CotationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum ProductStatus {
+  IN_STOCK
+  OUT_OF_STOCK
+}
+
+enum ProductSector {
+  INDUSTRIAL
+  HOME
+
+}
+
+enum WorkerType {
+  CDI
+  CDD
+  TRAINEE
+}
+
+enum WorkerStatus {
+  ACTIF
+  INACTIF
+  FIRED
+  TIMEOFF
+  VACATION
+  SICK_LEAVE
+}
+
+enum PresentStatus { 
+  ACTIF
+  INACTIF
+}
+
+enum ClientType {
+  PARTICULAR
+  ENTREPRISE
+}
+
+enum StockEditType {
+  SET_QUANTITY
+  SET_NAME
+  SET_DESCRIPTION
+  SET_IMAGES
+  PURCHASE
+  SELL
+  ADD
+  STOCK_OUT
+  STOCK_RETURN
+}
+
+enum StockEditStatus {
+  ISVALIDED
+  ISREJECTED
+  PENDING_VALIDATION
+  AWAITING_CONFIRMATION
+}
+
+enum RapportPeriode {
+  MATIN
+  SOIR
+}
+
+enum TaskDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum TaskImportance {
+  SMALL
+  MEDIUM
+  HIGH
+}
+
+
+enum MissionStatus {
+  APPROUVED
+  COMPLETED
+  PENDING
+  SUSPENDED
+}
+
+enum ProjectStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum AccountingJournalType {
+  CHANTIER
+  DEPENSE
+  CAISSE
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CHECK
+  MOBILE_MONEY
+  OTHER
+}
+
+enum AccountingJournalDirection {
+  INCOME
+  OUTCOME
+}
+
+enum ExpenseRequestType {
+  CARBURANT
+  MATERIEL
+  TRANSPORT
+  REPAS
+  AUTRE
+}
+
+enum ExpenseRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+
+model User {
+  id                   String    @default(ulid()) @unique
+  name                 String
+  email                String
+  emailVerified        Boolean   @default(false)
+  image                String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  role                 String?
+  banned               Boolean?  @default(false)
+  banReason            String?
+  banExpires           DateTime?
+  passwordIsAlreadySet Boolean?  @default(false)
+  workerId             String?   @unique
+  workRole             String?
+  pageAccess           String[]
+  particularRole       String[]
+  matricule            String?
+  sessions             Session[]
+  accounts             Account[]
+  passwordResetRequests PasswordResetRequest[]
+  passwordUpdateLogs   PasswordUpdateLog[]
+  emittedNotifications  Notification[] @relation("EmittedNotifications")
+  
+  // Relations added to satisfy other models
+  workersAdded         Worker[]          @relation("addedBy")
+  worker               Worker?           @relation(name: "workAccount", fields: [workerId], references: [id], onDelete: Cascade)
+  teamsInitiated       Team[]
+  rapports             Rapport[]
+  projectsCreated      Project[]         @relation("ProjectCreator")
+  clientsAdded         Client[]
+  tasks                Task[]
+  messagesSent         Message[]
+  groupMessages        GroupMessage[]
+  productsAdded        Product[]
+  salesAuthored        Sale[]
+  expenses             Expense[]
+  expenseRequests      ExpenseRequest[]  @relation("ExpenseRequestRequester")
+  approvedExpenseRequests ExpenseRequest[] @relation("ExpenseRequestApprover")
+  purchases            Purchase[]
+  stockEdits           StockEditHistorique[]
+  providerPayments     ProviderPayment[]
+  trainingRequests     TrainingRequest[]
+  workerRequests       WorkerRequest[]
+
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id             String   @id
+  expiresAt      DateTime
+  token          String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  ipAddress      String?
+  userAgent      String?
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  impersonatedBy String?
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+model PasswordResetRequest {
+  id        String   @id @default(ulid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // "EMAIL" | "MANUAL"
+  status    String   @default("PENDING") // "PENDING" | "COMPLETED" | "REJECTED"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("password_reset_request")
+}
+
+model PasswordUpdateLog {
+  id        String   @id @default(ulid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resetById String?  // ID of admin who did it
+  method    String   // "EMAIL" | "MANUAL_ADMIN"
+  createdAt DateTime @default(now())
+
+  @@map("password_update_log")
+}
+
+model Notification {
+  id String @id @default(uuid())
+  title String
+  body String
+  type String
+  link String?
+  isRead Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  emitter User @relation("EmittedNotifications", fields: [emitterId], references: [id])
+  emitterId String
+  receiptIds String[] @default([])
+  readByIds String[] @default([])
+}
+
+model Worker {
+  id                    String    @id @default(uuid())
+  createdAt             DateTime  @default(now())
+  officalStart          DateTime  @default(now())
+  officialEnd           DateTime? @default(now())
+  duration              String? 
+  updatedAt             DateTime  @updatedAt
+  name                  String
+  email                 String    @unique
+  phone                 String
+  address               String
+  role                  String
+  particularRole        String[] @default([])
+  chefProjects          Project[] @relation(name: "ProjectChef")
+  participatingProjects Project[] @relation("ProjectParticipants")
+
+  taskAssignedBy        Task[] @relation(name: "taskAssignedBy")
+
+  salary                Float
+  salaryNet             Float?
+  salaryCurrency        String?   
+  salaryFrequency       String?   
+  salaryBonuses         Float?    @default(0)
+  salaryDeductions      Json?    
+  reviewsAuthors        Task[] @relation(name: "reviewsAuthor")
+  socialContributions   Float?    @default(0)
+
+  type                  WorkerType
+  status                WorkerStatus @default(ACTIF)
+  contractDuration      String?
+  presenceStatus        PresentStatus?
+  image                 String?
+  matricule             String    @unique
+  passwordIsAlreadySet  Boolean   @default(false)
+  isActive              Boolean   @default(false)
+
+  workerOrganigram      Team[]
+  chefFor               Team? @relation(name: "chef")
+  addedProducts         Product[]
+  editedStock           StockEditHistorique[]
+  addedClient           Client[]
+  addedBy               User     @relation(fields: [userId], references: [id], name: "addedBy")
+  userId                String
+  workAccount           User?    @relation(name: "workAccount")
+  sale                  Sale[]
+  mission               Mission[] @relation(name: "chef")
+  teammateMission       Mission[] @relation(name: "teammate")
+  rapport               Rapport[] @relation(name: "workerRapports")
+  rapportReviewsAuthors Rapport[] @relation(name: "rapportReviewsAuthor")
+  tasks                 Task[]
+  expense               Expense[]
+  purchase              Purchase[]
+  presence              Presence[]
+  providerPayments      ProviderPayment[]
+  workerRequests        WorkerRequest[]
+  particular            ParticularTask[]
+  adjoint               ParticularTask[] @relation(name: "adjoint")
+  Attendance            Attendance[]
+  AttendanceRecored     Attendance[] @relation(name: "recordedBy")
+  payroll               Payroll[]
+  // Relations comptabilité (author = Worker)
+  accountingReports     AccountingReport[]
+  accountingJournals    AccountingJournalEntry[]
+  budgetPlans           BudgetPlan[]
+  payrollCreated        Payroll[] @relation(name: "payrollAuthor")
+  announcements         Announcement[]
+  comments              Comment[]
+  trainingAssignments   TrainingAssignment[]
+  trainingRequests      TrainingRequest[]
+}
+
+
+model Team {
+  id String @id @default(uuid())
+  chef Worker @relation(name: "chef", fields: [chefId], references: [id])
+  chefId String @unique
+  chefRoleDescription String
+  worker Worker? @relation(fields: [workerId], references: [id])
+  workerId String?
+  workerList  Json[] @default([])
+  name String?
+  objectif String
+  description  String?
+  initiator User? @relation(fields: [userId], references: [id])
+  userId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  mission Mission[]
+  rapport Rapport[]
+  project Project[]
+  tasks Task[]
+  GroupMessage GroupMessage?
+}
+
+model Prestataire {
+  id             String   @id @default(uuid())
+  name            String
+  role           String    
+  description    String?   
+  disponibility  Boolean   @default(true) 
+  dailyRate Float    
+  phone      String? 
+  email          String?   
+  address        String?  
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model Provider {
+  id        String   @id @default(uuid())
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  country   String?
+  category  String?
+  nif       String?
+  contact   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  purchases Purchase[]
+  payments  ProviderPayment[]
+}
+
+model Rapport { 
+  id String @id @default(uuid())
+  team Team? @relation(fields: [teamId], references: [id])
+  teamId String?
+  worker Worker @relation(name: "workerRapports", fields: [workerId], references: [id])
+  workerId String
+  rapportReviews String?
+  rapportReviewsAuthor Worker? @relation(name: "rapportReviewsAuthor", fields: [rapportReviewsAuthorId], references: [id])
+  rapportReviewsAuthorId String?
+  user User? @relation(fields: [userId], references: [id])
+  userId String?
+  title String
+  body String
+  periode RapportPeriode @default(MATIN)
+  date DateTime  @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  projectId String?
+  project Project? @relation("ProjectRapports", fields: [projectId], references: [id])
+  mission Mission? @relation(fields: [missionId], references: [id])
+  missionId String?
+  tasks Task[] @relation("TaskToRapports")
+  legacyTasks Task[] @relation("LegacyTaskToRapport")
+}
+
+model Mission { 
+  id String @id @default(uuid())
+  chef Worker @relation(fields: [chefId], references: [id], name: "chef")
+  chefId String
+  team Team? @relation(fields: [teamId], references: [id])
+  teamId String?
+  worker Worker @relation(fields: [workerId], references: [id], name: "teammate")
+  workerId String
+  rapport Rapport[]
+  title String
+  description String
+  location String
+  objective String?
+  deliverables String?
+  budget Float @default(0)
+  expectedIncome Float @default(0)
+  startDate DateTime @default(now())
+  deadline DateTime
+  requestedAt DateTime @default(now())
+  orderNumber String @unique
+  requiresSignature Boolean @default(true)
+  budgetApproved Boolean @default(false)
+  approvedAt DateTime?
+  completedAt DateTime?
+  suspendedAt DateTime?
+  note String?
+  signatureSignedAt DateTime?
+  signatureSignedByName String?
+  signatureSignedByWorkerId String?
+  status MissionStatus @default(PENDING)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Project {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  startDate   DateTime  @default(now())
+  endDate     DateTime?
+  status      ProjectStatus @default(PENDING)
+  budget      Float?    @default(0)
+  
+  // Relations
+  chef        Worker    @relation("ProjectChef", fields: [chefId], references: [id])
+  chefId      String
+  
+  participants Worker[] @relation("ProjectParticipants")
+  
+  tasks       Task[]    @relation("ProjectTasks")
+  rapports    Rapport[] @relation("ProjectRapports")
+  purchases   Purchase[]
+  expenses    Expense[]
+  expenseRequests ExpenseRequest[]
+  
+  createdBy   User      @relation("ProjectCreator", fields: [createdById], references: [id])
+  createdById String
+
+  team        Team? @relation(fields: [teamId], references: [id])
+  teamId      String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Client {
+  id String @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Identité
+  name String
+  email String
+  phone String
+  address String
+
+  // Type et image
+  type ClientType @default(PARTICULAR)
+  image String?
+
+  // Liens relationnels
+  cotation Cotation? @relation(fields: [cotationId], references: [id])
+  cotationId String?
+  proFormaInvoice ProformaInvoice[]
+  finalInvoice FinalInvoice[]
+  addedBy Worker? @relation(fields: [addedById], references: [id])
+  addedById String?
+  user User? @relation(fields: [userId], references: [id])
+  userId String?
+
+  // Achats et produits
+  achat Sale[]
+  product Product[]
+
+  // Historique et finances
+  lastService String?
+  lastProduct String?
+  lastPrice Float?
+  totalPurchase Float @default(0)
+  status Status @default(ACTIVE)
+
+  // Champs entreprise ajoutés
+  isCompany Boolean @default(false)
+  companyName String?        // Nom commercial de l'entreprise
+  legalName String?          // Raison sociale / nom légal
+  registrationNumber String? // Numéro d'immatriculation (SIRET, RC, etc.)
+  vatNumber String?          // Numéro de TVA intracommunautaire
+  legalForm String?          // Forme juridique (SARL, SA, SAS, etc.)
+  industry String?           // Secteur d'activité
+  website String?            // Site web
+  contactPerson String?      // Personne à contacter (nom)
+  contactrole String?        //Role de la personne a contacter
+  contactPosition String?    // Poste de la personne de contact
+  billingAddress String?     // Adresse de facturation
+  shippingAddress String?    // Adresse de livraison
+  numberOfEmployees Int?     // Taille de l'entreprise
+  shareCapital Float?        // Capital social
+  registrationDate DateTime? // Date d'immatriculation
+  taxResidence String?       // Pays / régime fiscal
+  notes String?              // Notes internes spécifiques à l'entreprise
+}
+
+
+model Task {
+  id         String         @id @default(uuid())
+  body       String
+  difficulty TaskDifficulty?  @default(EASY)
+  importance TaskImportance? @default(SMALL)
+  done       Boolean        @default(false)
+  progress Int @default(0)
+  deadline String? 
+  deadLineDate DateTime?
+  assginedBy Worker? @relation(fields: [assignedById], references: [id], name: "taskAssignedBy")
+  assignedById String?
+
+
+  worker   Worker           @relation(fields: [workerId], references: [id])
+  workerId String
+
+  reviews  String?
+  reviewsAuthor Worker? @relation(fields: [reviewsAuthorId], references: [id], name: "reviewsAuthor")
+  reviewsAuthorId String?
+
+  team   Team? @relation(fields: [teamId], references: [id])
+  teamId String?
+  groupMessage GroupMessage? @relation(fields: [groupMessageId], references: [id])
+  groupMessageId  String?
+  message Message? @relation(fields: [messageId], references: [id])
+  messageId String?
+  rapport Rapport? @relation("LegacyTaskToRapport", fields: [rapportId], references: [id])
+  rapportId String?
+  rapports Rapport[] @relation("TaskToRapports")
+
+  originalTaskId String?
+
+  workerAcccount   User?           @relation(fields: [workerAcccountId], references: [id])
+  workerAcccountId String?
+
+  projectId        String?
+  project          Project?       @relation("ProjectTasks", fields: [projectId], references: [id])
+
+
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
+model ParticularTask { 
+  id String @id @default(uuid())
+  title String
+  description String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  worker Worker? @relation(fields: [workerId], references: [id])
+  adjoint Worker? @relation(fields: [adjointId], references: [id], name: "adjoint")
+  workerId String?
+  adjointId String?
+}
+
+model Discussion {
+   id String @id @default(uuid())
+   name String
+   lastMessage  String
+   lastMessageDate DateTime @default(now())
+   sender String?
+   createdBy String?
+   receipt Json[]  @default([])
+   receiptIds String[] @default([])
+   isViewByAll Boolean @default(false)
+   image String? 
+   isViewBy String[] @default([])
+   isView Boolean @default(false)
+   deletedBy String[] @default([])
+   createdAt DateTime @default(now())
+   updatedAt DateTime @updatedAt
+   message Message[]
+   groupMessage GroupMessage?
+}
+
+model Message {
+  id String @id @default(uuid())
+  discussion Discussion @relation(fields: [discussionId], references: [id]) 
+  task Task[]  
+  discussionId String
+  sender User @relation(fields: [senderId], references: [id])
+  senderId String
+  images    String[]  @default([])
+  GroupMessage GroupMessage? @relation(fields: [groupId], references: [id])
+  groupId String?
+  content String @default("")
+  receipt String[] @default([])
+  viewBy String[] @default([])
+  isView  Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model GroupMessage {
+  id String @id @default(uuid())
+  name String 
+  user User @relation(fields: [userId], references: [id])
+  userId String
+  discussion Discussion @relation(fields: [discussionId], references: [id])
+  discussionId String @unique
+  message Message[]
+  image String?
+  task Task[]
+  participants Json[] @default([])
+  removedMember String[] @default([])
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  team Team? @relation(fields: [teamId], references: [id])
+  admin String[] @default([])
+  teamId  String? @unique
+}
+
+model Cotation {
+  id           String  @id      @default(uuid())
+  reference    String        @unique
+  date         DateTime      @default(now())
+  clientId     Int
+  client       Client[]
+  totalHT      Float
+  totalTTC     Float
+  status       CotationStatus @default(PENDING)
+  description String
+  quantity    Int
+  unitPrice   Float
+  total       Float
+  createAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+
+model Product{
+  id           String  @id      @default(uuid()) 
+  ref String?
+  designation String?
+  code String @default("")
+  manufacturer String?
+  unity String?
+  name String
+  brand String? 
+  country String?
+  main_client String? 
+  category String
+  sellingPrice Float?
+  purchasePrice Float?
+  sector String
+  lastBuyer Client? @relation(fields: [lastBuyerId], references: [id])
+  lastBuyerId String? 
+  threshold Int @default(20)
+  quantity Int @default(0)
+  status ProductStatus @default(IN_STOCK)
+  thumbnails String?
+  images String[] @default([])
+  lastUpdate String? 
+  createAt DateTime @default(now())
+  updatedAt DateTime @updatedAt 
+  sale Sale[]
+  worker Worker? @relation(fields: [workerId], references: [id])
+  workerId String?
+  user User? @relation(fields: [userId], references: [id])
+  userId String? 
+  stockEditHistorique StockEditHistorique[]
+  purchase Purchase[]
+}
+
+model Sale {
+  id String @id @default(uuid())
+  client Client? @relation(fields: [clientId], references: [id])
+  clientId String?
+  clientName String
+  product Product @relation(fields: [productId], references: [id])
+  productId String
+  quantity Int
+  unitPrice Float @default(0)
+  totalPrice Float
+  status SaleStatus @default(PENDING)
+  createAt DateTime @default(now())
+  updatedAt DateTime @updatedAt 
+  delivredAt DateTime? 
+  proformaInvoice ProformaInvoice? @relation(fields: [proformaInvoiceId], references: [id])
+  proformaInvoiceId String?
+  finalInvoice FinalInvoice? @relation(fields: [finalInvoiceId], references: [id])
+  finalInvoiceId String?
+  worker Worker @relation(fields: [workerId], references: [id])
+  workerId String
+  authorAccount User? @relation(fields: [authorAccountId], references: [id])
+  authorAccountId  String?
+  stockEditHistorique StockEditHistorique?
+}
+
+model ProformaInvoice {
+  id String @id @default(uuid())
+  number String @unique
+  saleDate DateTime @default(now())
+  validUntil DateTime?
+  paymentTerms String
+  deliveryTime String?
+  vatRate Int @default(18)
+  currency String @default("XOF")
+  client Client? @relation(fields: [clientId], references: [id])
+  clientId  String? 
+  validationCode ValidationCode?
+  seller Json
+  buyer Json
+  items Json
+  totals Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sales Sale[]
+  stockEdits StockEditHistorique[]
+  quotation Quotation?
+}
+
+model FinalInvoice {
+  id String @id @default(uuid())
+  number String @unique
+  saleDate DateTime @default(now())
+  paymentTerms String
+  deliveryTime String?
+  vatRate Int @default(18)
+  currency String @default("XOF")
+  client Client? @relation(fields: [clientId], references: [id])
+  clientId  String?
+  validationCode ValidationCode?
+  seller Json
+  buyer Json
+  items Json
+  totals Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sales Sale[]
+  stockEdits StockEditHistorique[]
+  quotation Quotation?
+}
+
+
+enum QuotationStatus {
+  PENDING
+  CONFIRMED
+}
+
+model Quotation {
+  id String @id @default(uuid())
+  status QuotationStatus @default(PENDING)
+  deliveryTerms String?
+  deliveryTime String?
+
+  // pro forma (non définitive)
+  proformaInvoice ProformaInvoice @relation(fields: [proformaInvoiceId], references: [id], onDelete: Cascade)
+  proformaInvoiceId String @unique
+
+  // Vente/Facture définitive générée après confirmation
+  finalInvoice FinalInvoice? @relation(fields: [finalInvoiceId], references: [id], onDelete: SetNull)
+  finalInvoiceId String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Expense {
+  id String @id @default(uuid())
+  provider String
+  NIF String?
+  invoiceNumber String
+  amountET Int
+  designation String
+  TVA Int? 
+  emountTTC  Int?
+  type String? 
+  Object String
+  payementDate String
+  dibursement String
+  author Worker @relation(fields: [authorId], references: [id])
+  authorId String
+  user User @relation(fields: [userId], references: [id])
+  userId String
+  projectId String?
+  project Project? @relation(fields: [projectId], references: [id])
+}
+
+model ExpenseRequest {
+  id String @id @default(uuid())
+  type ExpenseRequestType
+  reason String
+  estimatedAmount Float
+  status ExpenseRequestStatus @default(PENDING)
+  requester User @relation("ExpenseRequestRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  requesterId String
+  approver User? @relation("ExpenseRequestApprover", fields: [approverId], references: [id], onDelete: SetNull)
+  approverId String?
+  projectId String?
+  project Project? @relation(fields: [projectId], references: [id])
+  approvedAt DateTime?
+  rejectedAt DateTime?
+  rejectionReason String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Purchase {
+  id                  String              @id @default(uuid())
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  providerId          String
+  provider            Provider            @relation(fields: [providerId], references: [id])
+  authorId            String
+  author              User                @relation(fields: [authorId], references: [id])
+  status              PurchaseStatus      @default(CONFIRMED)
+  
+  // Nouveaux champs pour le suivi des paiements et des montants
+  totalAmount         Float               @default(0) // Montant total de l'achat
+  amountPaid          Float               @default(0) // Montant déjà payé
+  isPaid              Boolean             @default(false) // Indique si l'achat est entièrement payé
+  dueDate             DateTime?           // Date d'échéance du paiement
+  paymentDate         DateTime?           // Date du dernier paiement effectué
+  invoiceNumber       String?             @unique // Numéro de facture, optionnel et unique
+  purchaseDate        DateTime            @default(now()) // Date de l'achat
+
+  // Relation avec les articles de l'achat (nouveau modèle PurchaseItem)
+  purchaseItems       PurchaseItem[]
+
+  // Relations existantes
+  stockEditHistorique StockEditHistorique[]
+  providerPayment     ProviderPayment[]
+
+  @@map("purchase")
+}
+
+model PurchaseItem {
+  id          String    @id @default(uuid())
+  purchaseId  String
+  purchase    Purchase  @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product?  @relation(fields: [productId], references: [id]) // Peut être null si le produit n'est pas encore dans le catalogue
+  productName String // Nom du produit au moment de l'achat (pour les nouveaux ou si le nom change)
+  stockEditHistorique? StockEditHistorique[] @relation(fields: [stockEditHistoriqueId], references: [id])
+  stockEditHistoriqueId String? @unique
+  quantity    Int
+  unitPrice   Float
+  totalPrice  Float // Prix total pour cette ligne d'article (quantity * unitPrice)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("purchase_item")
+}
+
+model StockEditHistorique {
+  id String @id @default(uuid())
+  user User? @relation(fields: [userId], references: [id])
+  userId String? 
+  worker Worker @relation(fields: [workerId], references: [id])
+  workerId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String 
+  type StockEditType
+  quantityToApply Int
+  sale Sale? @relation(fields: [saleId], references: [id])
+  saleId String? @unique
+  saleStatus String?
+  proformaInvoice ProformaInvoice? @relation(fields: [proformaInvoiceId], references: [id], onDelete: SetNull)
+  proformaInvoiceId String?
+  finalInvoice FinalInvoice? @relation(fields: [finalInvoiceId], references: [id], onDelete: SetNull)
+  finalInvoiceId String?
+  actualQuantity Int
+  reservedQuantity Int?
+  createAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  client String?
+  preventfieldValue Json? 
+  currentfieldValue Json?
+  reason String?
+  destination String?
+  status StockEditStatus @default(PENDING_VALIDATION)
+  previewUpdatedAt DateTime?
+  validityTime Int?
+  stockOutValidationCode ValidationCode? @relation("StockOutValidation")
+  stockReturnValidationCode ValidationCode? @relation("StockReturnValidation")
+  purchase Purchase? @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+  purchaseItems PurchaseItem[]
+  purchaseId String? @unique
+  requestId String?
+  
+  @@index([requestId])
+}
+
+model ProviderPayment {
+  id            String        @id @default(uuid())
+  amount        Float
+  paymentDate   String
+  method        PaymentMethod @default(CASH)
+  reference     String?
+  notes         String?
+  invoiceNumber String?
+  images        String[]      @default([])
+
+  provider      Provider      @relation(fields: [providerId], references: [id])
+  providerId    String
+
+  purchase      Purchase?     @relation(fields: [purchaseId], references: [id])
+  purchaseId    String?
+
+  author        Worker        @relation(fields: [authorId], references: [id])
+  authorId      String
+
+  user          User          @relation(fields: [userId], references: [id])
+  userId        String
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([providerId])
+  @@index([purchaseId])
+}
+
+
+model Announcement {
+  id               String    @id @default(uuid())
+  title            String
+  content          String    @db.Text
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  isPinned         Boolean   @default(false)
+  commentsEnabled  Boolean   @default(true)
+  authorId         String
+  author           Worker    @relation(fields: [authorId], references: [id])
+  comments         Comment[]
+}
+
+model Comment {
+  id             String       @id @default(uuid())
+  body           String       @db.Text
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  announcementId String
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  authorId       String
+  author         Worker       @relation(fields: [authorId], references: [id])
+}
+
+model AccountingReport {
+  id           String   @id @default(uuid())
+  title        String
+  totalIncome  Float
+  totalOutcome Float
+  balance      Float
+  startDate    DateTime
+  endDate      DateTime
+  content      Json     // Details of transactions summarized
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  // author = Worker (workerId)
+  author       Worker   @relation(fields: [workerId], references: [id])
+  workerId     String
+}
+
+model AccountingJournalEntry {
+  id             String                     @id @default(uuid())
+  journalType    AccountingJournalType
+  direction      AccountingJournalDirection
+  amount         Float
+  title          String
+  description    String?
+  paymentMethod  String?
+  reference      String?
+  sourceType     String?
+  sourceId       String?
+  isAutomated    Boolean                    @default(false)
+  entryDate      DateTime                   @default(now())
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+
+  // author = Worker (workerId)
+  author         Worker                     @relation(fields: [workerId], references: [id])
+  workerId       String
+
+  @@index([journalType, entryDate])
+  @@index([workerId, entryDate])
+  @@unique([sourceType, sourceId])
+}
+
+model BudgetPlan {
+  id             String   @id @default(uuid())
+  year           Int
+  month          Int
+  plannedIncome  Float    @default(0)
+  plannedExpense Float    @default(0)
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  author         Worker   @relation(fields: [workerId], references: [id])
+  workerId       String
+
+  @@index([workerId, year, month])
+  @@unique([workerId, year, month])
+}
+
+
+model Presence {
+  id        String   @id @default(uuid())
+  workerId  String
+  worker    Worker   @relation(fields: [workerId], references: [id])
+  date      DateTime @default(now())
+  arrivalTime DateTime @default(now())
+  recordedBy String?   // userId of the person who recorded it
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([workerId, date])
+}
+
+
+model Training {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  url         String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  assignments TrainingAssignment[]
+}
+
+model TrainingAssignment {
+  id         String   @id @default(uuid())
+  training   Training @relation(fields: [trainingId], references: [id])
+  trainingId String
+  worker     Worker   @relation(fields: [workerId], references: [id])
+  workerId   String
+  assignedAt DateTime @default(now())
+  status     String   @default("PENDING") // PENDING, COMPLETED
+}
+
+model TrainingRequest {
+  id            String   @id @default(uuid())
+  trainingTitle String
+  url           String?
+  justification String
+  status        RequestStatus @default(PENDING)
+  
+  worker        Worker   @relation(fields: [workerId], references: [id])
+  workerId      String
+  user          User     @relation(fields: [userId], references: [id])
+  userId        String
+  
+  rejectionReason String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+
+enum RequestType {
+  LEAVE
+  TRAINING
+  OTHER
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model WorkerRequest {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  type        RequestType
+  status      RequestStatus @default(PENDING)
+  
+  startDate   DateTime?
+  endDate     DateTime?
+  
+  workerId    String
+  worker      Worker   @relation(fields: [workerId], references: [id])
+  
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Attendance {
+  id          String   @id @default(uuid())
+  recordedBy  Worker   @relation(fields: [recordedById], references: [id], name: "recordedBy")
+  recordedById String
+  worker      Worker   @relation(fields: [workerId], references: [id])
+  workerId    String
+  date        DateTime @default(now())
+  checkIn     DateTime?
+  checkOut    DateTime?
+  status      String   
+  period      RapportPeriode @default(MATIN)
+}
+
+enum ValidationCodeType {
+  SALE
+  STOCK_OUT
+  STOCK_RETURN
+  PURCHASE
+}
+
+model ValidationCode {
+  id String @id @default(uuid())
+  code String
+  type ValidationCodeType
+
+  proformaInvoice ProformaInvoice? @relation(fields: [proformaInvoiceId], references: [id], onDelete: Cascade)
+  proformaInvoiceId String? @unique
+
+  finalInvoice FinalInvoice? @relation(fields: [finalInvoiceId], references: [id], onDelete: Cascade)
+  finalInvoiceId String? @unique
+
+  stockOutId String? @unique
+  stockOut StockEditHistorique? @relation("StockOutValidation", fields: [stockOutId], references: [id])
+
+  stockReturnId String? @unique
+  stockReturn StockEditHistorique? @relation("StockReturnValidation", fields: [stockReturnId], references: [id])
+
+  purchase Purchase? @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  purchaseId String? @unique
+
+  usedAt DateTime?
+  usedByWorkerId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([code])
+}
+
+model Payroll {
+  id             String   @id @default(uuid())
+  worker         Worker   @relation(fields: [workerId], references: [id])
+  workerId       String
+  author         Worker   @relation(fields: [authorId], references: [id], name: "payrollAuthor")
+  authorId       String
+  periodStart    DateTime
+  periodEnd      DateTime
+  baseSalary     Float
+  bonuses        Float     @default(0)
+  deductions     Float     @default(0)
+  netSalary      Float
+  issuedAt       DateTime  @default(now())
+}
+
