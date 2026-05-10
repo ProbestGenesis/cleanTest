@@ -62,9 +62,11 @@ export const confirmPurchaseOperation = async (
           include: {
             purchase: {
               include: {
-                product: {
-                  select: { id: true, name: true, ref: true, quantity: true },
-                },
+                purchaseItems: {
+                    include: {
+                        product: true
+                    }
+                }
               },
             },
           },
@@ -79,64 +81,55 @@ export const confirmPurchaseOperation = async (
         if (codeRow.purchase.status !== "DELIVERED") {
           throw new Error("Cet achat n'est pas prêt pour confirmation")
         }
-        if (!codeRow.purchase.productId || !codeRow.purchase.product) {
-          throw new Error("Le produit lié à cet achat est introuvable")
+
+        const itemsUpdated = []
+
+        for (const item of codeRow.purchase.purchaseItems) {
+            if (!item.productId || !item.product) {
+                throw new Error(`Le produit ${item.productName} est introuvable`)
+            }
+
+            const product = item.product
+            const quantity = item.quantity
+            const before = product.quantity
+            const after = before + quantity
+
+            await tx.product.update({
+                where: { id: product.id },
+                data: {
+                    quantity: after,
+                    status: after > 0 ? "IN_STOCK" : "OUT_OF_STOCK",
+                },
+            })
+
+            const stockHistory = await tx.stockEditHistorique.findFirst({
+                where: {
+                    purchaseId: codeRow.purchase.id,
+                    productId: product.id,
+                    status: "AWAITING_CONFIRMATION",
+                },
+            })
+
+            if (stockHistory) {
+                await tx.stockEditHistorique.update({
+                    where: { id: stockHistory.id },
+                    data: {
+                        status: "ISVALIDED",
+                        actualQuantity: after,
+                        currentfieldValue: {
+                            quantityBefore: before,
+                            quantityAfter: after,
+                            confirmedAt: new Date().toISOString(),
+                            confirmedByWorkerId: confirmerWorker.id,
+                            confirmedByWorkerName: confirmerWorker.name,
+                            purchaseCode: parsed.data.code,
+                        },
+                    },
+                })
+            }
+
+            itemsUpdated.push({ name: product.name, quantity })
         }
-        const product = codeRow.purchase.product
-
-        const stockHistory = await tx.stockEditHistorique.findFirst({
-          where: {
-            purchaseId: codeRow.purchase.id,
-            type: "PURCHASE",
-            status: "AWAITING_CONFIRMATION",
-          },
-        })
-
-        if (!stockHistory) {
-          throw new Error(
-            "L'historique de stock lié à cet achat est introuvable"
-          )
-        }
-
-        const quantity =
-          Number.parseInt(String(codeRow.purchase.quantity), 10) || 0
-        if (quantity <= 0) {
-          throw new Error("La quantité de cet achat est invalide")
-        }
-
-        const before = product.quantity
-        const after = before + quantity
-
-        const updatedProduct = await tx.product.update({
-          where: { id: product.id },
-          data: {
-            quantity: after,
-            status: after > 0 ? "IN_STOCK" : "OUT_OF_STOCK",
-            purchasePrice: codeRow.purchase.unityPrice,
-            sellingPrice: codeRow.purchase.estimatePrice,
-            category: codeRow.purchase.category,
-            brand: codeRow.purchase.brand,
-            unity: codeRow.purchase.unity,
-            country: codeRow.purchase.country,
-          },
-        })
-
-        await tx.stockEditHistorique.update({
-          where: { id: stockHistory.id },
-          data: {
-            type: "PURCHASE",
-            status: "ISVALIDED",
-            actualQuantity: after,
-            currentfieldValue: {
-              quantityBefore: before,
-              quantityAfter: after,
-              confirmedAt: new Date().toISOString(),
-              confirmedByWorkerId: confirmerWorker.id,
-              confirmedByWorkerName: confirmerWorker.name,
-              purchaseCode: parsed.data.code,
-            },
-          },
-        })
 
         await tx.purchase.update({
           where: { id: codeRow.purchase.id },
@@ -148,27 +141,15 @@ export const confirmPurchaseOperation = async (
           data: { usedAt: new Date(), usedByWorkerId: confirmerWorker.id },
         })
 
-        // Notifications will be created after the transaction using the
-        // project's notification helper to avoid persisting notifications if
-        // the transaction is rolled back.
-
-        return {
-          updatedProduct,
-          before,
-          after,
-          quantity,
-          purchaseId: codeRow.purchase.id,
-        }
+        return { itemsUpdated }
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
     )
 
-    // Real-time stock notifications handled via createNotification
-
     if (superAdmins.length > 0) {
       await createNotification({
-        title: "Stock mise a jour avec les articles achetées",
-        body: `Mise a jour par ${confirmerWorker.name} • Produit: ${result.updatedProduct.name} • Qté ajouté: ${result.quantity}`,
+        title: "Stock mis à jour avec les articles achetés",
+        body: `Mise à jour par ${confirmerWorker.name} • ${result.itemsUpdated.length} produits ajoutés.`,
         type: "PURCHASE",
         link: "/interne/purchases",
         receiverIds: superAdmins.map((admin) => admin.id),
@@ -178,7 +159,6 @@ export const confirmPurchaseOperation = async (
     revalidatePath("/interne/purchases")
     revalidatePath("/interne/stock")
     revalidatePath("/interne/products")
-    revalidatePath("/")
 
     return {
       ok: true as const,

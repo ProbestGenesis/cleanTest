@@ -389,34 +389,45 @@ export const paymentMethods = [
   "OTHER",
 ] as const
 
+export const PurchaseItemSchema = z.object({
+  productId: z.string().optional(),
+  productName: z.string().min(1, "Le nom du produit est requis"),
+  quantity: z.coerce.number().positive("La quantité doit être supérieure à 0"),
+  unitPrice: z.coerce.number().nonnegative("Le prix unitaire doit être positif"),
+  totalPrice: z.coerce.number().nonnegative().optional(),
+})
+
 export const PurchaseSchema = z.object({
   NIF: z.string().optional(),
   invoiceNumber: z.string().optional(),
-  amountET: z.number().int().optional(),
+  amountET: z.coerce.number().optional(),
   designation: z.string().optional(),
-  TVA: z.number().int().optional(),
-  emountTTC: z.number().int().optional(),
+  TVA: z.coerce.number().optional(),
+  emountTTC: z.coerce.number().optional(),
   interests: z.coerce.number().nonnegative().optional().default(0),
   dueDate: z.string().optional(),
 
   // Champs obligatoires
   provider: z.string().optional(),
   providerId: z.string().optional(),
-  productId: z.string().optional(),
   date: z.string(),
-  type: z.string(),
-  category: z.string(),
-  brand: z.string(),
-  country: z.string(),
-  description: z.string(),
-  quantity: z.coerce.number().positive(),
+  type: z.string().default("Achat"),
+  category: z.string().optional(),
+  brand: z.string().optional(),
+  country: z.string().optional(),
+  description: z.string().optional(),
+  quantity: z.coerce.number().nonnegative().default(0),
   receivedQuantity: z.coerce.number().nonnegative().optional().default(0),
-  unity: z.string(),
-  unityPrice: z.number().int(),
-  estimatePrice: z.number().int(),
+  unity: z.string().optional(),
+  unityPrice: z.coerce.number().nonnegative().default(0),
+  estimatePrice: z.coerce.number().nonnegative().default(0),
   paymentMethod: z.enum(paymentMethods).optional(),
   contact: z.string().optional(),
   projectId: z.string().optional(),
+
+  items: z.array(PurchaseItemSchema).min(1, "Au moins un article est requis"),
+  totalAmount: z.coerce.number().nonnegative().optional(),
+  amountPaid: z.coerce.number().nonnegative().optional().default(0),
 
   images: z.array(z.union([z.instanceof(File), z.string()])).optional(),
   invoiceFile: z.instanceof(File).optional(),

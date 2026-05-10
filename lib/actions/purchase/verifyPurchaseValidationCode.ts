@@ -17,13 +17,17 @@ export const verifyPurchaseValidationCode = async (
     }
 
     const row = await prisma.validationCode.findFirst({
-      where: { code: parsed.data.code },
+      where: { code: parsed.data.code, type: 'PURCHASE' },
       orderBy: { createdAt: 'desc' },
       include: {
         purchase: {
           include: {
-            providerRel: { select: { id: true, name: true } },
-            product: { select: { id: true, name: true, ref: true } },
+            provider: { select: { id: true, name: true } },
+            purchaseItems: {
+                include: {
+                    product: { select: { id: true, name: true, ref: true } }
+                }
+            }
           },
         },
       },
@@ -42,18 +46,13 @@ export const verifyPurchaseValidationCode = async (
       data: {
         purchaseValidationCodeId: row.id,
         purchaseId: row.purchase.id,
-        supplierName: row.purchase.providerRel?.name ?? row.purchase.provider,
-        productName: row.purchase.product?.name ?? row.purchase.designation ?? row.purchase.category,
-        productRef: row.purchase.product?.ref ?? null,
-        quantity: row.purchase.quantity || null,
+        supplierName: row.purchase.provider?.name ?? row.purchase.category,
+        products: row.purchase.purchaseItems.map(item => ({
+            name: item.product?.name ?? item.productName,
+            ref: item.product?.ref ?? null,
+            quantity: item.quantity,
+        })),
         status: row.purchase.status,
-        products: [
-          {
-            name: row.purchase.product?.name ?? row.purchase.designation ?? row.purchase.category,
-            ref: row.purchase.product?.ref ?? null,
-            quantity: row.purchase.quantity || null,
-          },
-        ],
       },
     }
   } catch (error) {

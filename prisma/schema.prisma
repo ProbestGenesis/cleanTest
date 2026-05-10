@@ -726,7 +726,7 @@ model Product{
   user User? @relation(fields: [userId], references: [id])
   userId String? 
   stockEditHistorique StockEditHistorique[]
-  purchase Purchase[]
+  purchaseItems PurchaseItem[]
 }
 
 model Sale {
@@ -870,7 +870,9 @@ model Purchase {
   providerId          String
   provider            Provider            @relation(fields: [providerId], references: [id])
   authorId            String
-  author              User                @relation(fields: [authorId], references: [id])
+  author              Worker              @relation(fields: [authorId], references: [id])
+  userId              String
+  user                User                @relation(fields: [userId], references: [id])
   status              PurchaseStatus      @default(CONFIRMED)
   
   // Nouveaux champs pour le suivi des paiements et des montants
@@ -882,12 +884,37 @@ model Purchase {
   invoiceNumber       String?             @unique // Numéro de facture, optionnel et unique
   purchaseDate        DateTime            @default(now()) // Date de l'achat
 
+  type                String              @default("Achat")
+  category            String?
+  brand               String?
+  country             String?
+  description         String?
+  quantity            Int                 @default(0)
+  receivedQuantity    Int                 @default(0)
+  interests           Float               @default(0)
+  unity               String?
+  unityPrice          Float               @default(0)
+  estimatePrice       Float               @default(0)
+  paymentMethod       PaymentMethod?
+  contact             String?
+  NIF                 String?
+  amountET            Float?
+  designation         String?
+  TVA                 Float?
+  emountTTC           Float?
+  images              String[]            @default([])
+  invoiceImage        String?
+
+  projectId           String?
+  project             Project?            @relation(fields: [projectId], references: [id])
+
   // Relation avec les articles de l'achat (nouveau modèle PurchaseItem)
   purchaseItems       PurchaseItem[]
 
   // Relations existantes
   stockEditHistorique StockEditHistorique[]
   providerPayment     ProviderPayment[]
+  validationCode      ValidationCode?
 
   @@map("purchase")
 }
@@ -899,13 +926,13 @@ model PurchaseItem {
   productId   String?
   product     Product?  @relation(fields: [productId], references: [id]) // Peut être null si le produit n'est pas encore dans le catalogue
   productName String // Nom du produit au moment de l'achat (pour les nouveaux ou si le nom change)
-  stockEditHistorique? StockEditHistorique[] @relation(fields: [stockEditHistoriqueId], references: [id])
-  stockEditHistoriqueId String? @unique
   quantity    Int
   unitPrice   Float
   totalPrice  Float // Prix total pour cette ligne d'article (quantity * unitPrice)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+
+  stockEditHistorique StockEditHistorique[]
 
   @@map("purchase_item")
 }
@@ -943,7 +970,7 @@ model StockEditHistorique {
   stockReturnValidationCode ValidationCode? @relation("StockReturnValidation")
   purchase Purchase? @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
   purchaseItems PurchaseItem[]
-  purchaseId String? @unique
+  purchaseId String?
   requestId String?
   
   @@index([requestId])
